@@ -21,9 +21,9 @@ serialize_capnp = ["atlas-capnp", "capnp"]
 default = ["serialize_serde"]
 
 [dependencies]
-atlas-common = { path = "../atlas-common" }
-atlas-capnp = { path = "../atlas-capnp", optional = true }
-atlas-metrics = { path = "../atlas-metrics" }
+atlas-common = { path = "../Atlas-Common" }
+atlas-capnp = { path = "../Atlas-capnp", optional = true }
+atlas-metrics = { path = "../Atlas-Metrics" }
 
 capnp = { version = "0.16.0", optional = true }
 bytes = "1.4.0"
