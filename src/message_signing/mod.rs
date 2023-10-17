@@ -13,11 +13,11 @@ use crate::serialize::{Buf, digest_message, Serializable};
 /// A trait that defines the signature verification function
 pub trait NetworkMessageSignatureVerifier<M, NI>
     where M: Serializable, NI: NetworkInformationProvider, Self: Sized {
-    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: M::Message) -> Result<(bool, M::Message)>;
+    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: M::Message) -> Result<M::Message>;
 
     /// Verify the signature of the internal message structure
     /// Returns Result<bool> where true means the signature is valid, false means it is not
-    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &M::Message, buf: &Buf) -> Result<bool>;
+    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &M::Message, buf: &Buf) -> Result<()>;
 }
 
 pub enum MessageKind {
@@ -29,7 +29,7 @@ pub struct DefaultReconfigSignatureVerifier<RM: Serializable, PM: Serializable, 
 
 impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSignatureVerifier<RM, PM, NI>
     where PM: Serializable, RM: Serializable, NI: NetworkInformationProvider + 'static {
-    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: RM::Message) -> Result<(bool, RM::Message)> {
+    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: RM::Message) -> Result<RM::Message> {
         let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
 
         let sig = header.signature();
@@ -38,20 +38,19 @@ impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSign
 
         if let Ok((buf, digest)) = cpu_workers::serialize_digest_no_threadpool(&network) {
             if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
-                if RM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_reconfig())? {
-                    Ok((true, network.into_reconfig()))
-                } else {
-                    Ok((false, network.into_reconfig()))
-                }
+
+                RM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_reconfig())?;
+
+                Ok(network.into_reconfig())
             } else {
-                Ok((false, network.into_reconfig()))
+                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
             }
         } else {
-            Ok((false, network.into_reconfig()))
+            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
         }
     }
 
-    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &RM::Message, buf: &Buf) -> Result<bool> {
+    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &RM::Message, buf: &Buf) -> Result<()> {
         let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
 
         let sig = header.signature();
@@ -60,10 +59,10 @@ impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSign
             if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
                 RM::verify_message_internal::<NI, Self>(info_provider, header, msg)
             } else {
-                Ok(false)
+                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
             }
         } else {
-            Ok(false)
+            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
         }
     }
 }
@@ -72,7 +71,7 @@ pub struct DefaultProtocolSignatureVerifier<RM: Serializable, PM: Serializable, 
 
 impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSignatureVerifier<RM, PM, NI>
     where RM: Serializable, PM: Serializable, NI: NetworkInformationProvider + 'static {
-    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: PM::Message) -> Result<(bool, PM::Message)> {
+    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: PM::Message) -> Result<PM::Message> {
         let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
 
         let sig = header.signature();
@@ -81,20 +80,18 @@ impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSign
 
         if let Ok((buf, digest)) = cpu_workers::serialize_digest_no_threadpool(&network) {
             if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
-                if PM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_system())? {
-                    Ok((true, network.into_system()))
-                } else {
-                    Ok((false, network.into_system()))
-                }
+                PM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_system())?;
+
+                Ok(network.into_system())
             } else {
-                Ok((false, network.into_system()))
+                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
             }
         } else {
-            Ok((false, network.into_system()))
+            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
         }
     }
 
-    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &PM::Message, buf: &Buf) -> Result<bool> {
+    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &PM::Message, buf: &Buf) -> Result<()> {
         let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
 
         let sig = header.signature();
@@ -103,10 +100,10 @@ impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSign
             if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
                 PM::verify_message_internal::<NI, Self>(info_provider, header, msg)
             } else {
-                Ok(false)
+                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
             }
         } else {
-            Ok(false)
+            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
         }
     }
 }

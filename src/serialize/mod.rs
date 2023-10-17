@@ -76,7 +76,7 @@ pub trait Serializable: Send + Sync {
 
     /// Verify the signature of the internal message structure, to make sure all makes sense
     ///
-    fn verify_message_internal<NI, SV>(info_provider: &Arc<NI>, header: &Header, msg: &Self::Message) -> Result<bool> where
+    fn verify_message_internal<NI, SV>(info_provider: &Arc<NI>, header: &Header, msg: &Self::Message) -> Result<()> where
         NI: NetworkInformationProvider + 'static,
         SV: NetworkMessageSignatureVerifier<Self, NI>,
         Self: Sized;
