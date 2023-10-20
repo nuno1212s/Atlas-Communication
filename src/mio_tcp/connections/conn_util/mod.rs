@@ -256,5 +256,5 @@ impl WritingBuffer {
 }
 
 pub fn initialize_send_channel() -> (ChannelSyncTx<NetworkSerializedMessage>, ChannelSyncRx<NetworkSerializedMessage>) {
-    channel::new_bounded_sync(SEND_QUEUE_SIZE)
+    channel::new_bounded_sync(SEND_QUEUE_SIZE, Some("Network Msg"))
 }

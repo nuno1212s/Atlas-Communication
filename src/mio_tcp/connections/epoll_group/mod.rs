@@ -29,7 +29,7 @@ pub(crate) fn init_worker_group_handle<NI, RM, PM>(worker_count: u32) -> (EpollW
     let mut receivers = Vec::with_capacity(worker_count as usize);
 
     for _ in 0..worker_count {
-        let (tx, rx) = channel::new_bounded_sync(DEFAULT_WORKER_CHANNEL);
+        let (tx, rx) = channel::new_bounded_sync(DEFAULT_WORKER_CHANNEL, Some("Worker Group Handle"));
 
         workers.push(tx);
         receivers.push(rx);

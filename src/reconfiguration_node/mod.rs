@@ -91,8 +91,8 @@ pub struct ReconfigurationMessageHandler<T> {
 impl<T> ReconfigurationMessageHandler<T> {
     pub fn initialize() -> Self {
         ReconfigurationMessageHandler {
-            reconfiguration_message_handling: channel::new_bounded_sync(100),
-            update_message_handling: channel::new_bounded_sync(100),
+            reconfiguration_message_handling: channel::new_bounded_sync(100, Some("Reconfig message handle")),
+            update_message_handling: channel::new_bounded_sync(100, Some("Reconfig update message")),
         }
     }
 
