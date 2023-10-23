@@ -73,7 +73,8 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
 
         match node_type {
             NodeType::Replica => {
-                let (client_tx, client_rx) = channel::new_bounded_sync(NODE_CHAN_BOUND);
+                let (client_tx, client_rx) = channel::new_bounded_sync(NODE_CHAN_BOUND,
+                                                                       Some("Client Pool Handle"));
 
                 client_handling = Some(ConnectedPeersGroup::new(DEFAULT_CLIENT_QUEUE,
                                                                 batch_size,
@@ -308,7 +309,7 @@ pub struct ReplicaHandling<T> where T: Send {
 
 impl<T> ReplicaHandling<T> where T: Send {
     pub fn new(capacity: usize) -> Arc<Self> {
-        let (sender, receiver) = channel::new_unbounded_sync();
+        let (sender, receiver) = channel::new_unbounded_sync(Some("Replica message channel"));
 
         Arc::new(
             Self {

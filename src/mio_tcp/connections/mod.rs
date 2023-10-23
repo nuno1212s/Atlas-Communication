@@ -216,7 +216,7 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
 
 
     pub(super) fn setup_tcp_server_worker(self: &Arc<Self>, listener: SyncListener) {
-        let (tx, rx) = channel::new_bounded_sync(SEND_QUEUE_SIZE);
+        let (tx, rx) = channel::new_bounded_sync(SEND_QUEUE_SIZE, Some("TCP Server Worker"));
 
         self.registered_servers.register_server(tx);
 
