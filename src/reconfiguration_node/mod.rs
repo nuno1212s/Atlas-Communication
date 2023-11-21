@@ -97,11 +97,7 @@ impl<T> ReconfigurationMessageHandler<T> {
     }
 
     pub fn push_request(&self, message: T) -> Result<()> {
-        if let Err(err) = self.reconfiguration_message_handling.0.send(message) {
-            return Err(Error::simple_with_msg(ErrorKind::CommunicationChannel, format!("Failed to send reconfiguration message to the message channel. Error: {:?}", err).as_str()));
-        }
-
-        return Ok(());
+        self.reconfiguration_message_handling.0.send(message)
     }
 }
 
@@ -149,7 +145,7 @@ impl<T> ReconfigurationMessageHandler<T> {
 
 impl<T> ReconfigurationIncomingHandler<T> for ReconfigurationMessageHandler<T> {
     fn receive_reconfig_message(&self) -> Result<T> {
-        self.reconfiguration_message_handling.1.recv().wrapped_msg(ErrorKind::CommunicationChannel, "Failed to receive message")
+        self.reconfiguration_message_handling.1.recv()
     }
 
     fn try_receive_reconfig_message(&self, timeout: Option<Duration>) -> Result<Option<T>> {
@@ -192,8 +188,6 @@ impl<T> ReconfigurationIncomingHandler<T> for ReconfigurationMessageHandler<T> {
 
 impl<T> ReconfigurationNetworkUpdate for ReconfigurationMessageHandler<T> {
     fn send_reconfiguration_update(&self, update: NetworkUpdateMessage) -> Result<()> {
-        self.update_message_handling.0.send(update);
-
-        Ok(())
+        self.update_message_handling.0.send(update)
     }
 }

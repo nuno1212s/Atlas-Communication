@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
+use thiserror::Error;
 use atlas_common::crypto::hash::Digest;
 use atlas_common::node_id::NodeId;
 use atlas_common::error::*;
@@ -77,4 +78,10 @@ pub trait ProtocolNetworkNode<M>: NetworkNode +  Send + Sync where M: Serializab
     /// Ok if there is a current connection to the targets or err if not. No other checks are made
     /// on the success of the message dispatch
     fn broadcast_serialized(&self, messages: BTreeMap<NodeId, StoredSerializedProtocolMessage<M::Message>>) -> std::result::Result<(), Vec<NodeId>>;
+}
+
+#[derive(Error, Debug)]
+pub enum SendProtocolMessage {
+    #[error("There are no established connection to node {0:?}")]
+    UnknownNodes(Vec<NodeId>)
 }

@@ -11,11 +11,13 @@ use futures::{AsyncWrite, AsyncWriteExt};
 
 #[cfg(feature = "serialize_serde")]
 use serde::{Serialize, Deserialize};
+use thiserror::Error;
 
 use atlas_common::error::*;
 
 use atlas_common::crypto::hash::{Context, Digest};
 use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
+use atlas_common::Err;
 use atlas_common::node_id::NodeId;
 use atlas_common::ordering::{Orderable, SeqNo};
 
@@ -404,8 +406,7 @@ impl Header {
     /// Serialize a `Header` into a byte buffer of appropriate size.
     pub fn serialize_into(self, buf: &mut [u8]) -> Result<()> {
         if buf.len() < Self::LENGTH {
-            return Err("Buffer is too short to serialize into")
-                .wrapped(ErrorKind::CommunicationMessage);
+            return Err!(MessageErrors::InvalidSizeSerDest(buf.len()));
         }
         Ok(unsafe { self.serialize_into_unchecked(buf) })
     }
@@ -430,8 +431,7 @@ impl Header {
     /// Deserialize a `Header` from a byte buffer of appropriate size.
     pub fn deserialize_from(buf: &[u8]) -> Result<Self> {
         if buf.len() < Self::LENGTH {
-            return Err("Buffer is too short to deserialize from")
-                .wrapped(ErrorKind::CommunicationMessage);
+            return Err!(MessageErrors::InvalidSizeHeader(buf.len()))
         }
         Ok(unsafe { Self::deserialize_from_unchecked(buf) })
     }
@@ -529,7 +529,7 @@ impl WireMessage {
     pub fn from_parts(header: Header, payload: Buf) -> Result<Self> {
         let wm = Self { header, payload };
         if !wm.is_valid(None, true) {
-            return Err(Error::simple(ErrorKind::CommunicationMessage));
+            return Err!(MessageErrors::InvalidWireMessage);
         }
         Ok(wm)
     }
@@ -537,7 +537,7 @@ impl WireMessage {
     pub fn from_header(header: Header) -> Result<Self> {
         let wm = Self { header, payload: Buf::new() };
         if !wm.is_valid(None, false) {
-            return Err(Error::simple(ErrorKind::CommunicationMessage));
+            return Err!(MessageErrors::InvalidWireMessage);
         }
         Ok(wm)
     }
@@ -695,6 +695,16 @@ impl Debug for Header {
                version, length, signature, digest, nonce, from, to
         )
     }
+}
+
+#[derive(Debug, Error)]
+pub enum MessageErrors {
+    #[error("The wire message is not valid")]
+    InvalidWireMessage,
+    #[error("The header has an invalid size {0}")]
+    InvalidSizeHeader(usize),
+    #[error("Destination header is too small {0}")]
+    InvalidSizeSerDest(usize),
 }
 
 #[cfg(test)]

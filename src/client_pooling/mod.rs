@@ -5,7 +5,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use dashmap::DashMap;
 
 use log::{error, info, trace};
-use atlas_common::channel;
+use thiserror::Error;
+use atlas_common::{channel, Err};
 use atlas_common::channel::{ChannelMultRx, ChannelMultTx, ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::error::*;
 use atlas_common::node_id::NodeType;
@@ -86,7 +87,6 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
                 client_channel = Some((client_tx, client_rx));
             }
             NodeType::Client => {
-
                 client_handling = None;
                 client_channel = None;
             }
@@ -130,7 +130,8 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
                 self.replica_handling.init_client(peer)
             }
             NodeType::Client => {
-                self.client_handling.as_ref().expect("Tried to init client request from client itself?")
+                self.client_handling.as_ref()
+                    .ok_or(ClientPoolError::NoClientsConnected).unwrap()
                     .init_client(peer)
             }
         }
@@ -147,7 +148,8 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
                 self.replica_handling.resolve_connection(peer)
             }
             NodeType::Client => {
-                self.client_handling.as_ref().expect("Tried to resolve client conn in the client")
+                self.client_handling.as_ref()
+                    .ok_or(ClientPoolError::NoClientsConnected).unwrap()
                     .get_client_conn(peer)
             }
         };
@@ -161,7 +163,7 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
     fn get_client_rx(&self) -> Result<&ChannelSyncRx<ClientRqBatchOutput<T>>> {
         return match &self.client_rx {
             None => {
-                Err(Error::simple_with_msg(ErrorKind::CommunicationIncomingPeerHandling, "Failed to receive from clients as there are no clients connected"))
+                Err!(ClientPoolError::NoClientsConnected)
             }
             Some(rx) => {
                 Ok(rx)
@@ -203,16 +205,11 @@ impl<T: Send> NodeIncomingRqHandler<T> for PeerIncomingRqHandling<T> {
 
         match timeout {
             None => {
-                match rx.recv() {
-                    Ok((vec, time_created)) => {
-                        metric_duration(CLIENT_POOL_BATCH_PASSING_TIME_ID, time_created.elapsed());
+                let (vec, time_created) = rx.recv()?;
 
-                        Ok(vec)
-                    }
-                    Err(_) => {
-                        Err(Error::simple_with_msg(ErrorKind::CommunicationIncomingPeerHandling, "Failed to receive"))
-                    }
-                }
+                metric_duration(CLIENT_POOL_BATCH_PASSING_TIME_ID, time_created.elapsed());
+
+                Ok(vec)
             }
             Some(timeout) => {
                 match rx.recv_timeout(timeout) {
@@ -227,7 +224,7 @@ impl<T: Send> NodeIncomingRqHandler<T> for PeerIncomingRqHandling<T> {
                                 Ok(vec![])
                             }
                             _ => {
-                                Err(Error::simple_with_msg(ErrorKind::CommunicationIncomingPeerHandling, "Failed to receive"))
+                                Err!(err)
                             }
                         }
                     }
@@ -254,7 +251,7 @@ impl<T: Send> NodeIncomingRqHandler<T> for PeerIncomingRqHandling<T> {
                         Ok(None)
                     }
                     _ => {
-                        Err(Error::wrapped(ErrorKind::CommunicationIncomingPeerHandling, err))
+                        Err!(err)
                     }
                 }
             }
@@ -469,7 +466,7 @@ impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
             it_count += 1;
 
             if it_count >= IT_LIMIT {
-                return Err(Error::simple(ErrorKind::Communication));
+                return Err!(ClientPoolError::FailedToAllocateClientPoolID);
             }
 
             if !self.client_pools.lock().unwrap().contains_key(&pool_id) {
@@ -626,8 +623,8 @@ impl<T> ConnectedPeersPool<T> where T: Send {
                     let vec = match self.collect_requests(self.batch_size, &self.owner) {
                         Ok(vec) => { vec }
                         Err(err) => {
-                            match err.kind() {
-                                ErrorKind::Communication => {
+                            match err {
+                                ClientPoolError::ClosePool => {
                                     //The pool is empty, so to save CPU, delete it
                                     self.owner.del_pool(self.pool_id);
 
@@ -685,7 +682,7 @@ impl<T> ConnectedPeersPool<T> where T: Send {
         };
     }
 
-    pub fn collect_requests(&self, batch_target_size: usize, owner: &Arc<ConnectedPeersGroup<T>>) -> Result<Vec<T>> {
+    pub fn collect_requests(&self, batch_target_size: usize, owner: &Arc<ConnectedPeersGroup<T>>) -> std::result::Result<Vec<T>, ClientPoolError> {
         let start = Instant::now();
 
         let vec_size = std::cmp::max(batch_target_size, self.owner.per_client_cache);
@@ -699,7 +696,7 @@ impl<T> ConnectedPeersPool<T> where T: Send {
         let mut connected_peers = Vec::with_capacity(guard.len());
 
         if guard.len() == 0 {
-            return Err(Error::simple(ErrorKind::Communication));
+            return Err!(ClientPoolError::ClosePool);
         }
 
         for connected_peer in &*guard {
@@ -795,7 +792,7 @@ impl<T> ConnectedPeersPool<T> where T: Send {
             owner.del_cached_clients(dced);
 
             if should_delete_pool {
-                return Err(Error::simple(ErrorKind::Communication));
+                return Err!(ClientPoolError::ClosePool);
             }
         }
 
@@ -876,7 +873,7 @@ impl<T> ConnectedPeer<T> where T: Send {
                     None => {
                         error!("Failed to send to client {:?} as he was already disconnected", client_id);
 
-                        Err(Error::simple_with_msg(ErrorKind::Communication, "Channel is closed"))
+                        Err!(ClientPoolError::PooledConnectionClosed(client_id.clone()))
                     }
                     Some(sender) => {
                         //We don't clone and ditch the lock since each replica
@@ -896,10 +893,24 @@ impl<T> ConnectedPeer<T> where T: Send {
                     Err(err) => {
                         error!("Failed to deliver data from {:?} because {:?}", self.client_id(), err);
 
-                        Err(Error::simple_with_msg(ErrorKind::Communication, "Channel is closed"))
+                        Err!(ClientPoolError::UnpooledConnectionClosed(client_id.clone()))
                     }
                 }
             }
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum ClientPoolError {
+    #[error("This error is meant to be used to close the pool")]
+    ClosePool,
+    #[error("The unpooled connection is closed {0:?}")]
+    UnpooledConnectionClosed(NodeId),
+    #[error("The pooled connection is closed {0:?}")]
+    PooledConnectionClosed(NodeId),
+    #[error("Failed to allocate client pool ID")]
+    FailedToAllocateClientPoolID,
+    #[error("Failed to receive from clients as there are no clients connected")]
+    NoClientsConnected,
 }

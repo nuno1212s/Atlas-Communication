@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
+use anyhow::anyhow;
 use intmap::IntMap;
 use atlas_common::crypto::hash::{Context, Digest};
 use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
@@ -30,40 +31,31 @@ pub struct DefaultReconfigSignatureVerifier<RM: Serializable, PM: Serializable, 
 impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSignatureVerifier<RM, PM, NI>
     where PM: Serializable, RM: Serializable, NI: NetworkInformationProvider + 'static {
     fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: RM::Message) -> Result<RM::Message> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
+        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!( "Could not find public key for peer"))?;
 
         let sig = header.signature();
 
         let network = NetworkMessageKind::<RM, PM>::from_reconfig(msg);
 
-        if let Ok((buf, digest)) = cpu_workers::serialize_digest_no_threadpool(&network) {
-            if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
+        let (buf, digest) = cpu_workers::serialize_digest_no_threadpool(&network)?;
 
-                RM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_reconfig())?;
+        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
 
-                Ok(network.into_reconfig())
-            } else {
-                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-            }
-        } else {
-            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-        }
+        RM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_reconfig())?;
+
+        Ok(network.into_reconfig())
     }
 
     fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &RM::Message, buf: &Buf) -> Result<()> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
+        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!( "Could not find public key for peer"))?;
 
         let sig = header.signature();
 
-        if let Ok(digest) = digest_message(buf.clone()) {
-            if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
-                RM::verify_message_internal::<NI, Self>(info_provider, header, msg)
-            } else {
-                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-            }
-        } else {
-            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-        }
+        let digest = digest_message(buf.clone())?;
+
+        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
+
+        RM::verify_message_internal::<NI, Self>(info_provider, header, msg)
     }
 }
 
@@ -72,39 +64,31 @@ pub struct DefaultProtocolSignatureVerifier<RM: Serializable, PM: Serializable, 
 impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSignatureVerifier<RM, PM, NI>
     where RM: Serializable, PM: Serializable, NI: NetworkInformationProvider + 'static {
     fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: PM::Message) -> Result<PM::Message> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
+        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
 
         let sig = header.signature();
 
         let network = NetworkMessageKind::<RM, PM>::from_system(msg);
 
-        if let Ok((buf, digest)) = cpu_workers::serialize_digest_no_threadpool(&network) {
-            if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
-                PM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_system())?;
+        let (buf, digest) = cpu_workers::serialize_digest_no_threadpool(&network)?;
 
-                Ok(network.into_system())
-            } else {
-                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-            }
-        } else {
-            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-        }
+        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
+
+        PM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_system())?;
+
+        Ok(network.into_system())
     }
 
     fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &PM::Message, buf: &Buf) -> Result<()> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(Error::simple_with_msg(ErrorKind::CommunicationPeerNotFound, "Could not find public key for peer"))?;
+        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
 
         let sig = header.signature();
 
-        if let Ok(digest) = digest_message(buf.clone()) {
-            if let Ok(()) = verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref()) {
-                PM::verify_message_internal::<NI, Self>(info_provider, header, msg)
-            } else {
-                Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-            }
-        } else {
-            Err(Error::simple_with_msg(ErrorKind::CryptoSignature, "Failed to verify signature"))
-        }
+        let digest = digest_message(buf.clone())?;
+        
+        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
+        
+        PM::verify_message_internal::<NI, Self>(info_provider, header, msg)
     }
 }
 

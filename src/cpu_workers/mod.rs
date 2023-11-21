@@ -5,7 +5,7 @@ use log::{error, info, warn};
 use atlas_common::channel::{new_oneshot_channel, OneShotRx};
 use atlas_common::crypto::hash::Digest;
 use atlas_common::error::*;
-use atlas_common::{channel, threadpool};
+use atlas_common::{channel, quiet_unwrap, threadpool};
 use atlas_metrics::metrics::metric_duration;
 use crate::client_pooling::ConnectedPeer;
 use crate::message::{Header, NetworkMessage, NetworkMessageKind, StoredMessage};
@@ -63,14 +63,7 @@ pub(crate) fn serialize_digest_no_threadpool<RM, PM>(message: &NetworkMessageKin
     // TODO: Use a memory pool here
     let mut buf = Vec::with_capacity(512);
 
-    let digest = match serialize::serialize_digest::<Vec<u8>, RM, PM>(message, &mut buf) {
-        Ok(dig) => dig,
-        Err(err) => {
-            error!("Failed to serialize message {:?}. Message is {:?}", err, message);
-
-            panic!("Failed to serialize message {:?}", err);
-        }
-    };
+    let digest = quiet_unwrap!(serialize::serialize_digest::<Vec<u8>, RM, PM>(message, &mut buf));
 
     let buf = Bytes::from(buf);
 
@@ -87,16 +80,7 @@ pub(crate) fn deserialize_message_no_threadpool<RM, PM>(header: Header, payload:
     //TODO: Verify signatures
 
     // deserialize payload
-    let message = match serialize::deserialize_message::<&[u8], RM, PM>(&payload[..header.payload_length()]) {
-        Ok(m) => m,
-        Err(err) => {
-            // errors deserializing -> faulty connection;
-            // drop this socket
-            error!("{:?} // Failed to deserialize message {:?}", header.to(), err);
-
-            return Err(Error::wrapped(ErrorKind::CommunicationSerialize, err));
-        }
-    };
+    let message = serialize::deserialize_message::<&[u8], RM, PM>(&payload[..header.payload_length()])?;
 
     metric_duration(COMM_DESERIALIZE_VERIFY_TIME_ID, start.elapsed());
 
@@ -130,11 +114,11 @@ pub(crate) fn deserialize_and_push_reconf_message<RM, PM>(header: Header, payloa
     threadpool::execute(move || {
         metric_duration(THREADPOOL_PASS_TIME_ID, start.elapsed());
 
-        let (message, _) = deserialize_message_no_threadpool::<RM, PM>(header.clone(), payload).unwrap();
+        let (message, _) = quiet_unwrap!( deserialize_message_no_threadpool::<RM, PM>(header.clone(), payload));
 
         match message {
             NetworkMessageKind::ReconfigurationMessage(reconf) => {
-                reconf_handle.push_request(StoredMessage::new(header, reconf.into())).unwrap();
+                quiet_unwrap!(reconf_handle.push_request(StoredMessage::new(header, reconf.into())));
             }
             _ => error!("Received a non-reconfiguration message while we still have no extra information about the node. {:?}, message {:?}. Ignoring.", header.from(), message)
         }
@@ -150,17 +134,17 @@ pub(crate) fn deserialize_and_push_message<RM, PM>(header: Header, payload: Byte
     threadpool::execute(move || {
         metric_duration(THREADPOOL_PASS_TIME_ID, start.elapsed());
 
-        let (message, _) = deserialize_message_no_threadpool::<RM, PM>(header.clone(), payload).unwrap();
+        let (message, _) = quiet_unwrap!(deserialize_message_no_threadpool::<RM, PM>(header.clone(), payload));
 
         match message {
             NetworkMessageKind::ReconfigurationMessage(reconf) => {
-                reconf_handle.push_request(StoredMessage::new(header, reconf.into())).unwrap();
+                quiet_unwrap!(reconf_handle.push_request(StoredMessage::new(header, reconf.into())));
             }
             NetworkMessageKind::Ping(_) => {
                 warn!("MIO does not currently use this (and the only one that uses this function is MIO so....)")
             }
             NetworkMessageKind::System(sys_msg) => {
-                connection.push_request(StoredMessage::new(header, sys_msg.into())).unwrap();
+                quiet_unwrap!(connection.push_request(StoredMessage::new(header, sys_msg.into())));
             }
         }
     });

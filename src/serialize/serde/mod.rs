@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use anyhow::Context;
 use atlas_common::error::*;
 use crate::message::NetworkMessageKind;
 use crate::serialize::Serializable;
@@ -11,7 +12,7 @@ pub fn serialize_message<W, RM, PM>(
     RM: Serializable,
     PM: Serializable {
     bincode::serde::encode_into_std_write(m, w, bincode::config::standard())
-        .wrapped_msg(ErrorKind::CommunicationSerialize, format!("Failed to serialize message {} bytes len", w.as_mut().len()).as_str())?;
+        .with_context(|| format!("Failed to serialize message {} bytes len", w.as_mut().len()).as_str())?;
 
     Ok(())
 }
@@ -23,7 +24,7 @@ pub fn deserialize_message<R, RM, PM>(
           PM: Serializable,
           R: Read + AsRef<[u8]> {
     let msg = bincode::serde::decode_borrowed_from_slice(r.as_ref(), bincode::config::standard())
-        .wrapped_msg(ErrorKind::CommunicationSerialize, "Failed to deserialize message")?;
+        .context("Failed to deserialize message")?;
 
     Ok(msg)
 }

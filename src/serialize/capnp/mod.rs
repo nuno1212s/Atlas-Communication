@@ -1,10 +1,12 @@
 use std::io::Read;
 use std::io::Write;
 use std::ops::Deref;
+use anyhow::Context;
 use bytes::BytesMut;
 use capnp::message::ReaderOptions;
 use febft_capnp::network_messages_capnp::network_message::WhichReader;
 use atlas_common::crypto::hash::Digest;
+use atlas_common::Err;
 
 use atlas_common::error::*;
 use atlas_common::ordering::{Orderable, SeqNo};
@@ -51,8 +53,7 @@ pub fn serialize_message<W, RM, PM>(
         }
     }
 
-    capnp::serialize::write_message(w, &root).wrapped_msg(
-        ErrorKind::CommunicationSerialize,
+    capnp::serialize::write_message(w, &root).context(
         "Failed to serialize using capnp",
     )
 }
@@ -65,30 +66,28 @@ pub fn deserialize_message<R, RM, PM>(
 
     options.traversal_limit_in_words(None);
 
-    let reader = capnp::serialize::read_message(r, options).wrapped_msg(
-        ErrorKind::CommunicationSerialize,
+    let reader = capnp::serialize::read_message(r, options).context(
         "Failed to get capnp reader",
     )?;
 
-    let network_message: febft_capnp::network_messages_capnp::network_message::Reader = reader.get_root().wrapped_msg(
-        ErrorKind::CommunicationSerialize,
+    let network_message: febft_capnp::network_messages_capnp::network_message::Reader = reader.get_root().context(
         "Failed to get system msg root",
     )?;
 
-    let which = network_message.which().wrapped_msg(ErrorKind::CommunicationSerialize, "Failed to get which for network message")?;
+    let which = network_message.which().context("Failed to get which for network message")?;
 
     match which {
         WhichReader::SystemMessage(Ok(sys_msg)) => {
             Ok(NetworkMessageKind::System(System::from(M::deserialize_capnp(sys_msg)?)))
         }
         WhichReader::SystemMessage(Err(err)) => {
-            Err(Error::wrapped(ErrorKind::CommunicationSerialize, err))
+            Err!(err)
         }
         WhichReader::PingMessage(Ok(ping_msg)) => {
             Ok(NetworkMessageKind::Ping(PingMessage::new(ping_msg.get_request())))
         }
         WhichReader::PingMessage(Err(err)) => {
-            Err(Error::wrapped(ErrorKind::CommunicationSerialize, err))
+            Err!(err)
         }
     }
 }

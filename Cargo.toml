@@ -25,6 +25,8 @@ atlas-common = { path = "../Atlas-Common" }
 atlas-capnp = { path = "../Atlas-capnp", optional = true }
 atlas-metrics = { path = "../Atlas-Metrics" }
 
+anyhow = "1.0.75"
+thiserror = "1.0.50"
 capnp = { version = "0.16.0", optional = true }
 bytes = "1.4.0"
 serde = { version = "*", features = ["rc"], optional = true }
