@@ -6,6 +6,7 @@ use crate::serialize::Serializable;
 use atlas_common::error::*;
 #[cfg(feature = "serialize_serde")]
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use atlas_common::channel::OneShotRx;
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::NodeId;
@@ -80,4 +81,10 @@ pub trait FullNetworkNode<NI, RM, PM>: ProtocolNetworkNode<PM> + Reconfiguration
     /// Bootstrap the node
     async fn bootstrap(network_info_provider: Arc<NI>, node_config: Self::Config) -> Result<Self>
         where Self: Sized;
+}
+
+#[derive(Error, Debug)]
+pub enum NetworkSendError {
+    #[error("Peer not found {0:?}")]
+    PeerNotFound(NodeId)
 }

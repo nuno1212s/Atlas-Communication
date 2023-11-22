@@ -3,12 +3,13 @@ use std::iter;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
+use anyhow::Context;
 
 use either::Either;
 use log::{debug, error};
 use smallvec::SmallVec;
 
-use atlas_common::{socket, threadpool};
+use atlas_common::{Err, socket, threadpool};
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::KeyPair;
 use atlas_common::error::*;
@@ -18,7 +19,7 @@ use atlas_common::prng::ThreadSafePrng;
 use atlas_common::socket::SyncListener;
 use atlas_metrics::metrics::metric_duration;
 
-use crate::{FullNetworkNode, NetworkNode};
+use crate::{FullNetworkNode, NetworkNode, NetworkSendError};
 use crate::client_pooling::{ConnectedPeer, PeerIncomingRqHandling};
 use crate::config::MioConfig;
 use crate::conn_utils::ConnCounts;
@@ -64,7 +65,7 @@ impl<NI, RM, PM> MIOTcpNode<NI, RM, PM>
         RM: Serializable + 'static,
         PM: Serializable + 'static {
     fn setup_connection(id: &NodeId, server_addr: &SocketAddr) -> Result<SyncListener> {
-        socket::bind_sync_server(server_addr.clone()).wrapped(ErrorKind::Communication)
+        socket::bind_sync_server(server_addr.clone()).context(format!("Failed to setup connection with socket {:?}", server_addr))
     }
 
     fn setup_client_facing_socket(
@@ -240,7 +241,7 @@ impl<NI, RM, PM> ProtocolNetworkNode<PM> for MIOTcpNode<NI, RM, PM>
             self.send_tos(None, iter::once(target), flush);
 
         if !failed.is_empty() {
-            return Err(Error::simple(ErrorKind::CommunicationPeerNotFound));
+            return Err!(NetworkSendError::PeerNotFound(target));
         }
 
         Self::serialize_send_impl(send_to_me, send_to_others, nmk);
@@ -257,7 +258,7 @@ impl<NI, RM, PM> ProtocolNetworkNode<PM> for MIOTcpNode<NI, RM, PM>
             self.send_tos(keys, iter::once(target), flush);
 
         if !failed.is_empty() {
-            return Err(Error::simple(ErrorKind::CommunicationPeerNotFound));
+            return Err!(NetworkSendError::PeerNotFound(target));
         }
 
         Self::serialize_send_impl(send_to_me, send_to_others, nmk);
@@ -318,7 +319,7 @@ impl<NI, RM, PM> ProtocolNetworkNode<PM> for MIOTcpNode<NI, RM, PM>
             Err(err) => {
                 error!("Failed to serialize message {:?}", err);
 
-                Err(Error::simple(ErrorKind::CommunicationSerialize))
+                Err!(err)
             }
         }
     }
@@ -396,7 +397,7 @@ impl<NI, RM, PM> ReconfigurationNode<RM> for MIOTcpNode<NI, RM, PM>
             self.send_tos(keys, iter::once(target), true);
 
         if !failed.is_empty() {
-            return Err(Error::simple(ErrorKind::CommunicationPeerNotFound));
+            return Err!(NetworkSendError::PeerNotFound(target));
         }
 
         Self::serialize_send_impl(send_to_me, send_to_others, nmk);
