@@ -11,8 +11,9 @@ use log::{debug, error, info, trace, warn};
 use mio::{Events, Interest, Poll, Token, Waker};
 use mio::event::Event;
 use slab::Slab;
+use thiserror::Error;
 
-use atlas_common::{channel, prng, socket};
+use atlas_common::{channel, Err, prng, quiet_unwrap, socket};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, OneShotRx};
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
@@ -20,7 +21,7 @@ use atlas_common::peer_addr::PeerAddr;
 use atlas_common::socket::{MioListener, MioSocket, SecureSocket, SecureSocketSync, SyncListener};
 
 use crate::conn_utils::ConnCounts;
-use crate::cpu_workers;
+use crate::{cpu_workers, NetworkSendError};
 use crate::message::{Header, StoredMessage, WireMessage};
 use crate::mio_tcp::connections::{conn_util, Connections, NetworkSerializedMessage};
 use crate::mio_tcp::connections::conn_establish::pending_conn::{NetworkUpdate, PendingConnHandle, ServerRegisteredPendingConns};
@@ -594,7 +595,7 @@ impl ConnectionHandler {
             warn!("{:?} // Tried to connect to node that I'm already connecting to {:?}",
                 conn_handler.my_id(), peer_id);
 
-            let _ = tx.send(Err(Error::simple_with_msg(ErrorKind::Communication, "Already connecting to node")));
+            let _ = tx.send(Err!(ConnectionEstablishError::AlreadyConnectingToNode(peer_id)));
 
             return rx;
         }
@@ -616,7 +617,8 @@ impl ConnectionHandler {
                             None => {
                                 error!("{:?} // Failed to find IP address for peer {:?}", conn_handler.my_id(), peer_id);
 
-                                let _ = tx.send(Err(Error::simple_with_msg(ErrorKind::Communication, "Failed to find IP address for peer")));
+                                quiet_unwrap!(tx.send(Err!(NetworkSendError::PeerNotFound(peer_id))));
+
                                 return;
                             }
                         }.clone()
@@ -705,7 +707,7 @@ impl ConnectionHandler {
                 //if we fail to connect, then just ignore
                 error!("{:?} // Failed to connect to the node {:?} ", conn_handler.my_id(), peer_id);
 
-                let _ = tx.send(Err(Error::simple_with_msg(ErrorKind::Communication, "Failed to establish connection")));
+                let _ = tx.send(Err!(ConnectionEstablishError::FailedToConnectToNode(peer_id)));
             }).expect("Failed to allocate thread to establish connection");
 
         rx
@@ -789,4 +791,12 @@ impl Debug for PendingConnection {
             }
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum ConnectionEstablishError {
+    #[error("Failed to connect to node {0:?} as we are already connecting to that node")]
+    AlreadyConnectingToNode(NodeId),
+    #[error("Failed to connect to node {0:?}")]
+    FailedToConnectToNode(NodeId)
 }

@@ -12,7 +12,7 @@ pub fn serialize_message<W, RM, PM>(
     RM: Serializable,
     PM: Serializable {
     bincode::serde::encode_into_std_write(m, w, bincode::config::standard())
-        .with_context(|| format!("Failed to serialize message {} bytes len", w.as_mut().len()).as_str())?;
+        .context(format!("Failed to serialize message {} bytes len", w.as_mut().len()))?;
 
     Ok(())
 }

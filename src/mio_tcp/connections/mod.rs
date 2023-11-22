@@ -23,7 +23,9 @@ use mio::{Token, Waker};
 use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use atlas_common::channel;
+use anyhow::Context;
+use thiserror::Error;
+use atlas_common::{channel, Err};
 use crate::conn_utils::{Callback, ConnCounts};
 use crate::mio_tcp::connections::conn_establish::pending_conn::{NetworkUpdateHandler, PendingConnHandle, RegisteredServers, ServerRegisteredPendingConns};
 use crate::mio_tcp::connections::conn_util::{ReadingBuffer, WritingBuffer};
@@ -214,7 +216,6 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
     }
 
 
-
     pub(super) fn setup_tcp_server_worker(self: &Arc<Self>, listener: SyncListener) {
         let (tx, rx) = channel::new_bounded_sync(SEND_QUEUE_SIZE, Some("TCP Server Worker"));
 
@@ -228,7 +229,7 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
             self.network_info.clone(),
             Arc::clone(self),
             self.reconfig_handling.clone(),
-            rx
+            rx,
         );
     }
 
@@ -383,7 +384,6 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
 
             let _ = self.connect_to_node(node);
         }
-
     }
     pub fn pending_server_connections(&self) -> &Arc<ServerRegisteredPendingConns> {
         &self.server_connections
@@ -443,11 +443,7 @@ impl<RM, PM> PeerConnection<RM, PM>
         let from = msg.header().from();
         let to = msg.header().to();
 
-        if let Err(_) = self.to_send.0.send(msg) {
-            error!("{:?} // Failed to send peer message to {:?}", from, to);
-
-            return Err(Error::simple(ErrorKind::Communication));
-        }
+        self.to_send.0.send(msg).context(format!("{:?} // Failed to send peer message to {:?}", from, to))?;
 
         for conn_ref in self.connections.iter() {
             let conn = conn_ref.value();
@@ -462,10 +458,7 @@ impl<RM, PM> PeerConnection<RM, PM>
 
     /// Take a message from the send queue (blocking)
     fn take_from_to_send(&self) -> Result<NetworkSerializedMessage> {
-        self.to_send
-            .1
-            .recv()
-            .wrapped(ErrorKind::CommunicationChannel)
+        self.to_send.1.recv().context("Failed to take message from send queue")
     }
 
     /// Attempt to take a message from the send queue (non blocking)
@@ -473,7 +466,7 @@ impl<RM, PM> PeerConnection<RM, PM>
         match self.to_send.1.try_recv() {
             Ok(msg) => Ok(Some(msg)),
             Err(err) => match err {
-                TryRecvError::ChannelDc => Err(Error::simple(ErrorKind::CommunicationChannel)),
+                TryRecvError::ChannelDc => Err!(MioError::FailedToRetrieveFromSendQueue),
                 TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
             },
         }
@@ -532,4 +525,10 @@ impl ConnHandle {
     pub fn cancelled(&self) -> &Arc<AtomicBool> {
         &self.cancelled
     }
+}
+
+#[derive(Error, Debug)]
+pub enum MioError {
+    #[error("Failed to retrieve message from the send queue")]
+    FailedToRetrieveFromSendQueue
 }

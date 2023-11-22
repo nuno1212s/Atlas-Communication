@@ -63,7 +63,7 @@ pub(crate) fn serialize_digest_no_threadpool<RM, PM>(message: &NetworkMessageKin
     // TODO: Use a memory pool here
     let mut buf = Vec::with_capacity(512);
 
-    let digest = quiet_unwrap!(serialize::serialize_digest::<Vec<u8>, RM, PM>(message, &mut buf));
+    let digest = serialize::serialize_digest::<Vec<u8>, RM, PM>(message, &mut buf)?;
 
     let buf = Bytes::from(buf);
 

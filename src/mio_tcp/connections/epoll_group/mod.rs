@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use anyhow::Context;
 use log::error;
 use mio::{Token};
+use thiserror::Error;
 use atlas_common::channel;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::error::*;
@@ -94,10 +96,13 @@ impl<RM, PM> EpollWorkerGroupHandle<RM, PM>
     pub(super) fn assign_socket_to_worker(&self, conn_details: NewConnection<RM, PM>) -> atlas_common::error::Result<()> {
         let round_robin = self.round_robin.fetch_add(1, Ordering::Relaxed);
 
-        let worker = self.workers.get(round_robin % self.workers.len())
-            .ok_or(Error::simple_with_msg(ErrorKind::Communication, "Failed to get worker for connection?"))?;
+        let epoll_worker = round_robin % self.workers.len();
 
-        worker.send(EpollWorkerMessage::NewConnection(conn_details)).wrapped(ErrorKind::Communication)?;
+        let worker = self.workers.get(epoll_worker)
+            .ok_or(WorkerError::FailedToAllocateWorkerForConnection(epoll_worker, conn_details.peer_id, conn_details.conn_id))?;
+
+        worker.send(EpollWorkerMessage::NewConnection(conn_details))
+            .context("Failed to send new connection message to epoll worker")?;
 
         Ok(())
     }
@@ -105,9 +110,10 @@ impl<RM, PM> EpollWorkerGroupHandle<RM, PM>
     /// Order a disconnection of a given connection from a worker
     pub fn disconnect_connection_from_worker(&self, epoll_worker: EpollWorkerId, conn_id: Token) -> atlas_common::error::Result<()> {
         let worker = self.workers.get(epoll_worker as usize)
-            .ok_or(Error::simple_with_msg(ErrorKind::Communication, "Failed to get worker for connection?"))?;
+            .ok_or(WorkerError::FailedToGetWorkerForConnection(epoll_worker, conn_id))?;
 
-        worker.send(EpollWorkerMessage::CloseConnection(conn_id)).wrapped(ErrorKind::Communication)?;
+        worker.send(EpollWorkerMessage::CloseConnection(conn_id))
+            .context(format!("Failed to close connection in worker {:?}, {:?}", epoll_worker, conn_id))?;
 
         Ok(())
     }
@@ -122,4 +128,12 @@ impl<RM, PM> Clone for EpollWorkerGroupHandle<RM, PM>
             round_robin: AtomicUsize::new(0),
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum WorkerError {
+    #[error("Failed to allocate worker (planned {0:?}) for connection {2} with node {1:?}")]
+    FailedToAllocateWorkerForConnection(usize, NodeId, u32),
+    #[error("Failed to get the corresponding worker for connection {0:?}, {1:?}")]
+    FailedToGetWorkerForConnection(EpollWorkerId, Token)
 }

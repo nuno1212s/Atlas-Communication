@@ -10,6 +10,7 @@ use atlas_common::channel;
 
 use std::sync::{Arc};
 use std::time::Duration;
+use anyhow::anyhow;
 
 /// Represents the network information that a node needs to know about other nodes
 pub trait NetworkInformationProvider: Send + Sync {
@@ -53,7 +54,6 @@ pub trait ReconfigurationNetworkUpdate {
 
 /// Trait for handling reconfiguration messages and etc
 pub trait ReconfigurationNode<M>: NetworkNode + Send + Sync where M: Serializable + 'static {
-
     type IncomingReconfigRqHandler: ReconfigurationIncomingHandler<StoredMessage<M::Message>>;
 
     type ReconfigurationNetworkUpdate: ReconfigurationNetworkUpdate;
@@ -118,7 +118,7 @@ impl<T> ReconfigurationMessageHandler<T> {
                             Ok(None)
                         }
                         TryRecvError::ChannelDc => {
-                            Err(Error::simple_with_msg(ErrorKind::CommunicationChannel, "Reconfig message channel has disconnected?"))
+                            Err(anyhow!("Reconfig message channel has disconnected?"))
                         }
                     }
                 }
@@ -134,7 +134,7 @@ impl<T> ReconfigurationMessageHandler<T> {
                             Ok(None)
                         }
                         TryRecvError::ChannelDc => {
-                            Err(Error::simple_with_msg(ErrorKind::CommunicationChannel, "Reconfig message channel has disconnected?"))
+                            Err(anyhow!("Reconfig message channel has disconnected?"))
                         }
                     }
                 }
@@ -161,7 +161,7 @@ impl<T> ReconfigurationIncomingHandler<T> for ReconfigurationMessageHandler<T> {
                             Ok(None)
                         }
                         TryRecvError::ChannelDc => {
-                            Err(Error::simple_with_msg(ErrorKind::CommunicationChannel, "Reconfig message channel has disconnected?"))
+                            Err(anyhow!("Reconfig message channel has disconnected?"))
                         }
                     }
                 }
@@ -177,7 +177,7 @@ impl<T> ReconfigurationIncomingHandler<T> for ReconfigurationMessageHandler<T> {
                             Ok(None)
                         }
                         TryRecvError::ChannelDc => {
-                            Err(Error::simple_with_msg(ErrorKind::CommunicationChannel, "Reconfig message channel has disconnected?"))
+                            Err(anyhow!("Reconfig message channel has disconnected?"))
                         }
                     }
                 }

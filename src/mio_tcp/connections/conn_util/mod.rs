@@ -2,9 +2,8 @@ use std::io;
 use std::io::{Read, Write};
 use bytes::{Buf, Bytes, BytesMut};
 use log::{debug, trace};
-use atlas_common::channel;
+use atlas_common::{channel, Err};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx};
-use atlas_common::error::{Error, ErrorKind};
 use atlas_common::socket::MioSocket;
 use crate::message::{Header, WireMessage};
 use crate::mio_tcp::connections::{NetworkSerializedMessage, SEND_QUEUE_SIZE};
@@ -67,7 +66,7 @@ pub(super) fn try_write_until_block(socket: &mut MioSocket, writing_buffer: &mut
                     break;
                 }
                 Err(err) if interrupted(&err) => continue,
-                Err(err) => { return Err(Error::wrapped(ErrorKind::Communication, err)); }
+                Err(err) => { return Err!(err); }
             }
         } else {
             match socket.write(&writing_buffer.current_message[writing_buffer.written_bytes..]) {
@@ -88,7 +87,7 @@ pub(super) fn try_write_until_block(socket: &mut MioSocket, writing_buffer: &mut
                     break;
                 }
                 Err(err) if interrupted(&err) => continue,
-                Err(err) => { return Err(Error::wrapped(ErrorKind::Communication, err)); }
+                Err(err) => { return Err!(err); }
             }
         }
     }
@@ -118,7 +117,7 @@ pub(super) fn read_until_block(socket: &mut MioSocket, read_info: &mut ReadingBu
                     }
                     Err(err) if would_block(&err) => break,
                     Err(err) if interrupted(&err) => continue,
-                    Err(err) => { return Err(Error::wrapped(ErrorKind::Communication, err)); }
+                    Err(err) => { return Err!(err); }
                 }
             } else {
                 // Only read if we need to read from the socket.
@@ -160,7 +159,7 @@ pub(super) fn read_until_block(socket: &mut MioSocket, read_info: &mut ReadingBu
                     }
                     Err(err) if would_block(&err) => break,
                     Err(err) if interrupted(&err) => continue,
-                    Err(err) => { return Err(Error::wrapped(ErrorKind::Communication, err)); }
+                    Err(err) => { return Err!(err); }
                 }
             } else {
                 // Only read if we need to read from the socket. (As we are missing bytes)

@@ -638,7 +638,7 @@ impl<T> ConnectedPeersPool<T> where T: Send {
                     };
 
                     if !vec.is_empty() {
-                        self.batch_transmission.send((vec, Instant::now()))
+                        self.batch_transmission.send_return((vec, Instant::now()))
                             .expect("Failed to send proposed batch");
 
                         // Sleep for a determined amount of time to allow clients to send requests
@@ -886,7 +886,7 @@ impl<T> ConnectedPeer<T> where T: Send {
                 }
             }
             Self::UnpooledConnection { sender, client_id } => {
-                match sender.send((msg, Instant::now())) {
+                match sender.send_return((msg, Instant::now())) {
                     Ok(_) => {
                         Ok(())
                     }

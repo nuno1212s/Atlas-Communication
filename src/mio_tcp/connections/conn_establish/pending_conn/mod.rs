@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use anyhow::Context;
 
 use dashmap::DashMap;
 use log::info;
@@ -106,7 +107,7 @@ impl<RM, PM, NI> NetworkUpdateHandler<NI, RM, PM>
                                 self.server_conns.remove_pending_connection(node_id);
 
                                 self.registered_servers.registered_servers.lock().unwrap().iter().for_each(|tx|
-                                    tx.send(NetworkUpdate {
+                                    tx.send_return(NetworkUpdate {
                                         conn_handle: conn.clone(),
                                         network_update: network_update.clone(),
                                     }).unwrap()
@@ -133,14 +134,10 @@ impl PendingConnHandle {
     }
 
     pub fn peer_message(&self, message: WireMessage) -> Result<()> {
-        match self.channel.0.send(message) {
-            Ok(_) => {}
-            Err(err) => {
-                return Err(Error::simple_with_msg(ErrorKind::CommunicationChannel, format!("Failed to send message to channel. Error: {:?}", err).as_str()));
-            }
-        }
+        self.channel.0.send(message)
+            .context("Failed to place peer message into the peer connection channel")?;
 
-        self.waker.wake().wrapped_msg(ErrorKind::CommunicationServerNotWoken, "Failed to wake the server thread")
+        self.waker.wake().context("Failed to wake the server thread")
     }
 
     pub fn channel(&self) -> &(ChannelSyncTx<NetworkSerializedMessage>, ChannelSyncRx<NetworkSerializedMessage>) {

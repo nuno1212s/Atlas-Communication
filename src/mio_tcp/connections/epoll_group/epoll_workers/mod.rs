@@ -3,13 +3,14 @@ use std::io::{Read, Write};
 use std::net::Shutdown;
 use std::sync::Arc;
 use std::time::Duration;
+use anyhow::Context;
 use bytes::{Buf, Bytes, BytesMut};
 use log::{error, info, trace};
 use mio::{Events, Interest, Poll, Token, Waker};
 use mio::event::Event;
 use slab::Slab;
 use atlas_common::channel::{ChannelSyncRx};
-use atlas_common::error::{Error, ErrorKind, ResultWrappedExt};
+use atlas_common::Err;
 use atlas_common::node_id::NodeId;
 use atlas_common::socket::{MioSocket};
 use crate::cpu_workers;
@@ -81,7 +82,7 @@ impl<NI, RM, PM> EpollWorker<NI, RM, PM>
     /// Initializing a worker thread for the worker group
     pub fn new(worker_id: EpollWorkerId, connections: Arc<Connections<NI, RM, PM>>,
                register: ChannelSyncRx<EpollWorkerMessage<RM, PM>>) -> atlas_common::error::Result<Self> {
-        let poll = Poll::new().wrapped_msg(ErrorKind::Communication, "Failed to initialize poll")?;
+        let poll = Poll::new().context(format!("Failed to initialize poll for worker {:?}", worker_id))?;
 
         let mut conn_slab = Slab::with_capacity(DEFAULT_SOCKET_CAPACITY);
 
@@ -89,7 +90,7 @@ impl<NI, RM, PM> EpollWorker<NI, RM, PM>
 
         let waker_token = Token(entry.key());
         let waker = Arc::new(Waker::new(poll.registry(), waker_token)
-            .wrapped_msg(ErrorKind::Communication, "Failed to create waker")?);
+            .context(format!("Failed to create waker for worker {:?}", worker_id))?);
 
         entry.insert(SocketConnection::Waker);
 
@@ -306,7 +307,7 @@ impl<NI, RM, PM> EpollWorker<NI, RM, PM>
                                     Ok(_) => {}
                                     Err(ref err) if would_block(err) => break,
                                     Err(ref err) if interrupted(err) => continue,
-                                    Err(err) => { return Err(Error::wrapped(ErrorKind::Communication, err)); }
+                                    Err(err) => { return Err!(err); }
                                 };
                             }
 
@@ -328,12 +329,12 @@ impl<NI, RM, PM> EpollWorker<NI, RM, PM>
                 if writing_info.is_none() && was_waiting_for_write {
                     // We have nothing more to write, so we no longer need to be notified of writability
                     self.poll.registry().reregister(socket, token, Interest::READABLE)
-                        .wrapped_msg(ErrorKind::Communication, "Failed to reregister socket")?;
+                        .context("Failed to reregister socket")?;
                 } else if writing_info.is_some() && !was_waiting_for_write {
                     // We still have something to write but we reached a would block state,
                     // so we need to be notified of writability.
                     self.poll.registry().reregister(socket, token, Interest::READABLE.add(Interest::WRITABLE))
-                        .wrapped_msg(ErrorKind::Communication, "Failed to reregister socket")?;
+                        .context("Failed to reregister socket")?;
                 } else {
                     // We have nothing to write and we were not waiting for writability, so we
                     // Don't need to re register
