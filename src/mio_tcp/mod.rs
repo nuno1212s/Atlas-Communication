@@ -68,26 +68,6 @@ impl<NI, RM, PM> MIOTcpNode<NI, RM, PM>
         socket::bind_sync_server(server_addr.clone()).context(format!("Failed to setup connection with socket {:?}", server_addr))
     }
 
-    fn setup_client_facing_socket(
-        id: NodeId,
-        addr: PeerAddr,
-    ) -> Result<SyncListener> {
-        debug!("{:?} // Attempt to setup client facing socket.", id);
-        let server_addr = &addr.replica_facing_socket;
-
-        Self::setup_connection(&id, &server_addr.0)
-    }
-
-    fn setup_replica_facing_socket(
-        id: NodeId,
-        peer_addr: PeerAddr,
-    ) -> Result<Option<SyncListener>> {
-        if let Some((socket, _)) = peer_addr.client_facing_socket {
-            Ok(Some(Self::setup_connection(&id, &socket)?))
-        } else {
-            Ok(None)
-        }
-    }
     /// Create the send tos for a given target
     fn send_tos(&self, shared: Option<&Arc<KeyPair>>, targets: impl Iterator<Item=NodeId>, flush: bool)
                 -> (Option<SendTo<RM, PM>>, Option<SendTos<RM, PM>>, Vec<NodeId>) {
@@ -429,10 +409,8 @@ impl<NI, RM, PM> FullNetworkNode<NI, RM, PM> for MIOTcpNode<NI, RM, PM>
           PM: Serializable + 'static {
     type Config = MioConfig;
 
-    async fn bootstrap(network_info_provider: Arc<NI>, node_config: Self::Config) -> Result<Self> where NI: NetworkInformationProvider {
+    async fn bootstrap(id: NodeId, network_info_provider: Arc<NI>, node_config: Self::Config) -> Result<Self> where NI: NetworkInformationProvider {
         let MioConfig { node_config: cfg, worker_count } = node_config;
-
-        let id = cfg.id;
 
         debug!("Initializing sockets.");
 
@@ -450,7 +428,7 @@ impl<NI, RM, PM> FullNetworkNode<NI, RM, PM> for MIOTcpNode<NI, RM, PM>
 
         //Setup all the peer message reception handling.
         let peers = Arc::new(PeerIncomingRqHandling::new(
-            cfg.id,
+            id,
             network_info_provider.get_own_node_type(),
             cfg.client_pool_config,
         ));
@@ -458,7 +436,7 @@ impl<NI, RM, PM> FullNetworkNode<NI, RM, PM> for MIOTcpNode<NI, RM, PM>
         let (handle, receivers) = init_worker_group_handle::<NI, RM, PM>(worker_count as u32);
 
         let connections = Arc::new(Connections::initialize_connections(
-            cfg.id,
+            id,
             network_info_provider.clone(),
             handle.clone(),
             conn_counts.clone(),
@@ -477,11 +455,7 @@ impl<NI, RM, PM> FullNetworkNode<NI, RM, PM> for MIOTcpNode<NI, RM, PM>
 
         let addr = network_info_provider.get_own_addr();
 
-        let client_listener = Self::setup_client_facing_socket(cfg.id.clone(), addr.clone())?;
-
-        let replica_listener = Self::setup_replica_facing_socket(cfg.id.clone(), addr.clone())?;
-
-        connections.setup_tcp_server_worker(client_listener);
+        let replica_listener = Self::setup_connection(&id, addr.socket())?;
 
         replica_listener.map(|listener| connections.setup_tcp_server_worker(listener));
 

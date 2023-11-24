@@ -1,5 +1,6 @@
 use intmap::IntMap;
 use rustls::{ClientConfig, ServerConfig};
+use serde::Deserialize;
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::{NodeId, NodeType};
 
@@ -12,8 +13,6 @@ pub struct MioConfig {
 }
 
 pub struct NodeConfig {
-    /// The id of this `Node`.
-    pub id: NodeId,
     /// TCP specific configuration
     pub tcp_config: TcpConfig,
     ///The configurations of the client pool config

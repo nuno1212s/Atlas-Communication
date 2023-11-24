@@ -257,10 +257,9 @@ mod communication_test {
         for i in 0..node_count {
             let node_id = NodeId(i);
 
-            let srv = (SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), (start_port + i) as u16), format!("srv{}", i));
-            let srv_client_facing = (SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), (client_facing_start_port + i) as u16), format!("srv{}", i));
+            let (socket, hostname) = (SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), (start_port + i) as u16), format!("srv{}", i));
 
-            addrs.insert(i as u64, PeerAddr::new_replica(srv, srv_client_facing));
+            addrs.insert(i as u64, PeerAddr::new(socket, hostname));
         }
 
         for i in 0..client_count {
