@@ -455,10 +455,10 @@ impl<NI, RM, PM> FullNetworkNode<NI, RM, PM> for MIOTcpNode<NI, RM, PM>
 
         let addr = network_info_provider.get_own_addr();
 
-        let replica_listener = Self::setup_connection(&id, addr.socket())?;
+        let listener = Self::setup_connection(&id, addr.socket())?;
 
-        replica_listener.map(|listener| connections.setup_tcp_server_worker(listener));
-
+        connections.setup_tcp_server_worker(listener);
+            
         let network_node = Self {
             id,
             rng,

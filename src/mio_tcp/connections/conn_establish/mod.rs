@@ -607,23 +607,7 @@ impl ConnectionHandler {
                 //Get the correct IP for us to address the node
                 //If I'm a client I will always use the client facing addr
                 //While if I'm a replica I'll connect to the replica addr (clients only have this addr)
-                let addr = match connections.network_info.get_own_node_type() {
-                    NodeType::Replica => {
-                        addr.replica_facing_socket.clone()
-                    }
-                    NodeType::Client => {
-                        match addr.client_facing_socket.as_ref() {
-                            Some(addr) => addr,
-                            None => {
-                                error!("{:?} // Failed to find IP address for peer {:?}", conn_handler.my_id(), peer_id);
-
-                                quiet_unwrap!(tx.send(Err!(NetworkSendError::PeerNotFound(peer_id))));
-
-                                return;
-                            }
-                        }.clone()
-                    }
-                };
+                let addr = (addr.clone().into_inner());
 
                 const SECS: u64 = 1;
                 const RETRY: usize = 3 * 60;
