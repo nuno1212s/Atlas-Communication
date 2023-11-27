@@ -14,6 +14,8 @@ use anyhow::anyhow;
 
 /// Represents the network information that a node needs to know about other nodes
 pub trait NetworkInformationProvider: Send + Sync {
+    fn get_own_id(&self) -> NodeId;
+
     /// Get the node id of our own node
     fn get_own_addr(&self) -> PeerAddr;
 
