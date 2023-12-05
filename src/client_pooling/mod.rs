@@ -131,7 +131,7 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
             }
             NodeType::Client => {
                 self.client_handling.as_ref()
-                    .ok_or(ClientPoolError::NoClientsConnected).unwrap()
+                    .ok_or(ClientPoolError::CannotConnectToClients).unwrap()
                     .init_client(peer)
             }
         }
@@ -149,7 +149,7 @@ impl<T> PeerIncomingRqHandling<T> where T: Send {
             }
             NodeType::Client => {
                 self.client_handling.as_ref()
-                    .ok_or(ClientPoolError::NoClientsConnected).unwrap()
+                    .ok_or(ClientPoolError::CannotConnectToClients).unwrap()
                     .get_client_conn(peer)
             }
         };
@@ -913,4 +913,6 @@ pub enum ClientPoolError {
     FailedToAllocateClientPoolID,
     #[error("Failed to receive from clients as there are no clients connected")]
     NoClientsConnected,
+    #[error("Failed to get client connection as we can't connect to other clients")]
+    CannotConnectToClients
 }

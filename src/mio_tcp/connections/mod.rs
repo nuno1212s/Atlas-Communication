@@ -120,7 +120,6 @@ impl<NI, RM, PM> NodeConnections for Connections<NI, RM, PM>
 
             return vec![];
         }
-
         let addr = self.get_addr_for_node(&node);
         let node_type = self.network_info.get_node_type(&node);
 
@@ -128,6 +127,15 @@ impl<NI, RM, PM> NodeConnections for Connections<NI, RM, PM>
             error!("No address found for node {:?}", node);
 
             return vec![];
+        } else {
+            match (self.network_info.get_own_node_type(), node_type.unwrap()) {
+                (NodeType::Client, NodeType::Client) => {
+                    warn!("Attempted to connect to another client");
+
+                    return vec![];
+                }
+                _ => {}
+            }
         }
 
         let addr = addr.unwrap();
