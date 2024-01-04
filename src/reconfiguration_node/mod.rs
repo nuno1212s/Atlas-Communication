@@ -14,9 +14,11 @@ use anyhow::anyhow;
 
 /// Represents the network information that a node needs to know about other nodes
 pub trait NetworkInformationProvider: Send + Sync {
+    
+    /// Get the node id of our own node
     fn get_own_id(&self) -> NodeId;
 
-    /// Get the node id of our own node
+    /// Get the node address of our own node
     fn get_own_addr(&self) -> PeerAddr;
 
     /// Get our own key pair
@@ -24,7 +26,7 @@ pub trait NetworkInformationProvider: Send + Sync {
 
     /// Get your own node type
     fn get_own_node_type(&self) -> NodeType;
-
+    
     /// Get the node type for a given node
     fn get_node_type(&self, node: &NodeId) -> Option<NodeType>;
 
@@ -55,7 +57,9 @@ pub trait ReconfigurationNetworkUpdate {
 }
 
 /// Trait for handling reconfiguration messages and etc
-pub trait ReconfigurationNode<M>: NetworkNode + Send + Sync where M: Serializable + 'static {
+pub trait ReconfigurationNode<M>: NetworkNode + Send + Sync 
+    where M: Serializable + 'static {
+    
     type IncomingReconfigRqHandler: ReconfigurationIncomingHandler<StoredMessage<M::Message>>;
 
     type ReconfigurationNetworkUpdate: ReconfigurationNetworkUpdate;

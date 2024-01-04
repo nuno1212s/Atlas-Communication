@@ -1,14 +1,10 @@
 #![feature(async_fn_in_trait)]
 
 use std::sync::Arc;
-use std::time::Duration;
 use crate::serialize::Serializable;
 use atlas_common::error::*;
-#[cfg(feature = "serialize_serde")]
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use atlas_common::channel::OneShotRx;
-use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::NodeId;
 use crate::reconfiguration_node::{NetworkInformationProvider, ReconfigurationNode};
 use crate::protocol_node::ProtocolNetworkNode;

@@ -15,6 +15,7 @@ use atlas_common::error::*;
 use ::serde::{Deserialize, Serialize};
 
 use atlas_common::crypto::hash::{Context, Digest};
+use atlas_common::serialization_helper::SerType;
 use crate::message::{Header, NetworkMessageKind};
 use crate::message_signing::NetworkMessageSignatureVerifier;
 use crate::reconfiguration_node::NetworkInformationProvider;
@@ -68,11 +69,9 @@ pub fn digest_message(message: Buf) -> Result<Digest> {
 
 /// The trait that should be implemented for all systems which wish to use this communication method
 pub trait Serializable: Send + Sync {
-    #[cfg(feature = "serialize_capnp")]
-    type Message: Send + Clone;
 
-    #[cfg(feature = "serialize_serde")]
-    type Message: for<'a> Deserialize<'a> + Serialize + Send + Clone;
+    /// The message type
+    type Message: SerType;
 
     /// Verify the signature of the internal message structure, to make sure all makes sense
     ///
