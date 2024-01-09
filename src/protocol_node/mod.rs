@@ -34,7 +34,7 @@ pub trait NodeIncomingRqHandler<T>: Send {
 }
 
 /// A Network node devoted to handling
-pub trait ProtocolNetworkNode<M>: NetworkNode +  Send + Sync where M: Serializable + 'static {
+pub trait ProtocolNetworkNode<M>: NetworkNode +  Send + Sync where M: Serializable {
 
     /// Incoming request handler for this node
     type IncomingRqHandler: NodeIncomingRqHandler<StoredMessage<M::Message>>;

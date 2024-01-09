@@ -68,8 +68,8 @@ pub trait NetworkNode {
 pub trait FullNetworkNode<NI, RM, PM>: ProtocolNetworkNode<PM> + ReconfigurationNode<RM> + Send + Sync
     where
         NI: NetworkInformationProvider,
-        RM: Serializable + 'static,
-        PM: Serializable + 'static {
+        RM: Serializable ,
+        PM: Serializable  {
 
     /// The configuration type this node wants to accept
     type Config;

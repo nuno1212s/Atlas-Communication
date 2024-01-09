@@ -58,7 +58,7 @@ pub trait ReconfigurationNetworkUpdate {
 
 /// Trait for handling reconfiguration messages and etc
 pub trait ReconfigurationNode<M>: NetworkNode + Send + Sync 
-    where M: Serializable + 'static {
+    where M: Serializable {
     
     type IncomingReconfigRqHandler: ReconfigurationIncomingHandler<StoredMessage<M::Message>>;
 

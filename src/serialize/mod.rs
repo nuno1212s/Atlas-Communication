@@ -68,7 +68,7 @@ pub fn digest_message(message: Buf) -> Result<Digest> {
 
 
 /// The trait that should be implemented for all systems which wish to use this communication method
-pub trait Serializable: Send + Sync {
+pub trait Serializable: Send {
 
     /// The message type
     type Message: SerType;
