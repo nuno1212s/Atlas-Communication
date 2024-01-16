@@ -34,23 +34,24 @@ pub type NetworkSerializedMessage = (WireMessage);
 
 pub const SEND_QUEUE_SIZE: usize = 1024;
 
-pub struct Connections<NI, RM, PM>
+pub struct Connections<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     id: NodeId,
     // The current pending connections, awaiting information from the reconfiguration protocol
     server_connections: Arc<ServerRegisteredPendingConns>,
     // The running servers, which are currently handling the reception of new connections from other nodes
     registered_servers: RegisteredServers,
     // The map of registered connections
-    registered_connections: DashMap<NodeId, Arc<PeerConnection<RM, PM>>>,
+    registered_connections: DashMap<NodeId, Arc<PeerConnection<RM, PM, CM>>>,
     // A map of addresses to our known peers
     network_info: Arc<NI>,
     // A reference to the worker group that handles the epoll workers
-    worker_group: EpollWorkerGroupHandle<RM, PM>,
+    worker_group: EpollWorkerGroupHandle<RM, PM, CM>,
     // A reference to the client pooling
-    client_pooling: Arc<PeerIncomingRqHandling<StoredMessage<PM::Message>>>,
+    client_pooling: Arc<PeerIncomingRqHandling<StoredMessage<PM::Message>, StoredMessage<CM::Message>>>,
     // Reconfiguration message handling
     reconfig_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
     // Connection counts
@@ -60,12 +61,13 @@ pub struct Connections<NI, RM, PM>
 }
 
 /// Structure that is responsible for handling all connections to a given peer
-pub struct PeerConnection<RM, PM>
+pub struct PeerConnection<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     node_type: NodeType,
     //A handle to the request buffer of the peer we are connected to in the client pooling module
-    client: Arc<ConnectedPeer<StoredMessage<PM::Message>>>,
+    client: Arc<ConnectedPeer<StoredMessage<PM::Message>, StoredMessage<CM::Message>>>,
     //A handle to the reconfiguration message handler
     reconf_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
     // A thread-safe counter for generating connection ids
@@ -90,10 +92,11 @@ pub struct ConnHandle {
     pub(crate) cancelled: Arc<AtomicBool>,
 }
 
-impl<NI, RM, PM> NodeConnections for Connections<NI, RM, PM>
+impl<NI, RM, PM, CM> NodeConnections for Connections<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static
+          PM: Serializable + 'static,
+          CM: Serializable + 'static
 {
     fn is_connected_to_node(&self, node: &NodeId) -> bool {
         self.registered_connections.contains_key(node)
@@ -187,18 +190,19 @@ impl<NI, RM, PM> NodeConnections for Connections<NI, RM, PM>
     }
 }
 
-impl<NI, RM, PM> Connections<NI, RM, PM>
+impl<NI, RM, PM, CM> Connections<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static
+          PM: Serializable + 'static,
+          CM: Serializable + 'static
 {
     pub(super) fn initialize_connections(
         id: NodeId,
         node_addr_lookup: Arc<NI>,
-        group_handle: EpollWorkerGroupHandle<RM, PM>,
+        group_handle: EpollWorkerGroupHandle<RM, PM, CM>,
         conn_counts: ConnCounts,
         reconfiguration_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
-        client_pooling: Arc<PeerIncomingRqHandling<StoredMessage<PM::Message>>>,
+        client_pooling: Arc<PeerIncomingRqHandling<StoredMessage<PM::Message>, StoredMessage<CM::Message>>>,
     ) -> Result<Self> {
         let conn_handler = Arc::new(ConnectionHandler::initialize(
             id.clone(),
@@ -242,7 +246,7 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
     }
 
     /// Get the connection to a given node
-    pub fn get_connection(&self, node: &NodeId) -> Option<Arc<PeerConnection<RM, PM>>> {
+    pub fn get_connection(&self, node: &NodeId) -> Option<Arc<PeerConnection<RM, PM, CM>>> {
         let option = self.registered_connections.get(node);
 
         option.map(|conn| conn.value().clone())
@@ -262,14 +266,14 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
     /// preemptively so there is no possibility for the connection details to be lost due to
     /// multi threading non atomic shenanigans
     fn preemptive_conn_register(self: &Arc<Self>, node: NodeId, node_type: NodeType, channel: (ChannelSyncTx<NetworkSerializedMessage>, ChannelSyncRx<NetworkSerializedMessage>))
-                                -> Result<Arc<PeerConnection<RM, PM>>> {
+                                -> Result<Arc<PeerConnection<RM, PM, CM>>> {
         debug!("Preemptively registering connection to node {:?}", node);
 
         let option = self.registered_connections.entry(node);
 
         let conn = option.or_insert_with(|| {
             Arc::new(PeerConnection::new(node_type,
-                                         self.client_pooling.init_peer_conn(node, node_type),
+                                         self.client_pooling.init_peer_conn(node, node_type)?,
                                          self.reconfig_handling.clone(), channel))
         });
 
@@ -313,7 +317,7 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
         let peer_conn = option.or_insert_with(|| {
             let con = Arc::new(PeerConnection::new(
                 node_type,
-                self.client_pooling.init_peer_conn(node, node_type),
+                self.client_pooling.init_peer_conn(node, node_type)?,
                 self.reconfig_handling.clone(),
                 channel,
             ));
@@ -402,13 +406,14 @@ impl<NI, RM, PM> Connections<NI, RM, PM>
     }
 }
 
-impl<RM, PM> PeerConnection<RM, PM>
+impl<RM, PM, CM> PeerConnection<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static
+          PM: Serializable + 'static,
+          CM: Serializable + 'static
 {
     fn new(
         node_type: NodeType,
-        client: Arc<ConnectedPeer<StoredMessage<PM::Message>>>,
+        client: Arc<ConnectedPeer<StoredMessage<PM::Message>, StoredMessage<CM::Message>>>,
         reconf_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
         channel: (ChannelSyncTx<NetworkSerializedMessage>, ChannelSyncRx<NetworkSerializedMessage>),
     ) -> Self {
@@ -484,7 +489,7 @@ impl<RM, PM> PeerConnection<RM, PM>
         self.connections.remove(&conn_id);
     }
 
-    pub fn client_pool_peer(&self) -> &Arc<ConnectedPeer<StoredMessage<PM::Message>>> {
+    pub fn client_pool_peer(&self) -> &Arc<ConnectedPeer<StoredMessage<PM::Message>, StoredMessage<CM::Message>>> {
         &self.client
     }
 }

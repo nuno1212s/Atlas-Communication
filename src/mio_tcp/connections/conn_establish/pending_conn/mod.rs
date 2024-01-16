@@ -39,14 +39,15 @@ pub struct NetworkUpdate {
 
 /// handle updates sent from the reconfiguration protocol and then propagate them to the threads
 /// responsible for managing the currently pending connections, so they
-pub(crate) struct NetworkUpdateHandler<NI, RM, PM>
+pub(crate) struct NetworkUpdateHandler<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     server_conns: Arc<ServerRegisteredPendingConns>,
     registered_servers: RegisteredServers,
     reconfiguration_handler: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
-    peer_conns: Arc<Connections<NI, RM, PM>>,
+    peer_conns: Arc<Connections<NI, RM, PM, CM>>,
 }
 
 /// The servers that are registered with us and that should receive updates from the reconfiguration protocol
@@ -55,16 +56,17 @@ pub struct RegisteredServers {
     registered_servers: Arc<Mutex<Vec<ChannelSyncTx<NetworkUpdate>>>>,
 }
 
-impl<RM, PM, NI> NetworkUpdateHandler<NI, RM, PM>
+impl<RM, PM, NI, CM> NetworkUpdateHandler<NI, RM, PM, CM>
     where
         NI: NetworkInformationProvider + 'static,
         RM: Serializable + 'static,
-        PM: Serializable + 'static {
+        PM: Serializable + 'static,
+        CM: Serializable + 'static {
     pub fn initialize_update_handler(
         registered_servers: RegisteredServers,
         pending_conns: Arc<ServerRegisteredPendingConns>,
         reconf_handle: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
-        conns: Arc<Connections<NI, RM, PM>>) {
+        conns: Arc<Connections<NI, RM, PM, CM>>) {
         let handler = Self {
             server_conns: pending_conns,
             registered_servers,

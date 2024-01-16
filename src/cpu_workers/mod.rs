@@ -19,9 +19,11 @@ use crate::serialize::Serializable;
 /// Serialize and digest a given message.
 /// Returns a OneShotRx that can be recv() or awaited depending on whether it's being used
 /// in synchronous or asynchronous workloads.
-pub(crate) fn serialize_digest_message<RM, PM>(message: NetworkMessageKind<RM, PM>)
-                                               -> OneShotRx<Result<(Bytes, Digest)>>
-    where RM: Serializable + 'static, PM: Serializable + 'static {
+pub(crate) fn serialize_digest_message<RM, PM, CM>(message: NetworkMessageKind<RM, PM, CM>)
+                                                   -> OneShotRx<Result<(Bytes, Digest)>>
+    where RM: Serializable + 'static,
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     let (tx, rx) = new_oneshot_channel();
 
     let start = Instant::now();
@@ -39,9 +41,11 @@ pub(crate) fn serialize_digest_message<RM, PM>(message: NetworkMessageKind<RM, P
 
 /// Serialize and digest a request in the threadpool but don't actually send it. Instead, return the
 /// the message back to us as well so we can do what ever we want with it.
-pub(crate) fn serialize_digest_threadpool_return_msg<RM, PM>(message: NetworkMessageKind<RM, PM>)
-                                                             -> OneShotRx<(NetworkMessageKind<RM, PM>, Result<(Bytes, Digest)>)>
-    where RM: Serializable + 'static, PM: Serializable + 'static {
+pub(crate) fn serialize_digest_threadpool_return_msg<RM, PM, CM>(message: NetworkMessageKind<RM, PM, CM>)
+                                                                 -> OneShotRx<(NetworkMessageKind<RM, PM, CM>, Result<(Bytes, Digest)>)>
+    where RM: Serializable + 'static,
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     let (tx, rx) = channel::new_oneshot_channel();
 
     threadpool::execute(move || {
@@ -55,15 +59,15 @@ pub(crate) fn serialize_digest_threadpool_return_msg<RM, PM>(message: NetworkMes
 
 /// Serialize and digest a given message, but without sending the job to the threadpool
 /// Useful if we want to re-utilize this for other things
-pub(crate) fn serialize_digest_no_threadpool<RM, PM>(message: &NetworkMessageKind<RM, PM>)
-                                                     -> Result<(Bytes, Digest)>
-    where RM: Serializable, PM: Serializable {
+pub(crate) fn serialize_digest_no_threadpool<RM, PM, CM>(message: &NetworkMessageKind<RM, PM, CM>)
+                                                         -> Result<(Bytes, Digest)>
+    where RM: Serializable, PM: Serializable, CM: Serializable {
     let start = Instant::now();
 
     // TODO: Use a memory pool here
     let mut buf = Vec::with_capacity(512);
 
-    let digest = serialize::serialize_digest::<Vec<u8>, RM, PM>(message, &mut buf)?;
+    let digest = serialize::serialize_digest::<Vec<u8>, RM, PM, CM>(message, &mut buf)?;
 
     let buf = Bytes::from(buf);
 
@@ -73,14 +77,17 @@ pub(crate) fn serialize_digest_no_threadpool<RM, PM>(message: &NetworkMessageKin
 }
 
 /// Deserialize a given message without using the threadpool.
-pub(crate) fn deserialize_message_no_threadpool<RM, PM>(header: Header, payload: BytesMut) -> Result<(NetworkMessageKind<RM, PM>, BytesMut)>
-    where RM: Serializable + 'static, PM: Serializable + 'static {
+pub(crate) fn deserialize_message_no_threadpool<RM, PM, CM>(header: Header, payload: BytesMut) -> Result<(NetworkMessageKind<RM, PM, CM>, BytesMut)>
+    where RM: Serializable + 'static,
+          PM: Serializable + 'static,
+          CM: Serializable + 'static
+{
     let start = Instant::now();
 
     //TODO: Verify signatures
 
     // deserialize payload
-    let message = serialize::deserialize_message::<&[u8], RM, PM>(&payload[..header.payload_length()])?;
+    let message = serialize::deserialize_message::<&[u8], RM, PM, CM>(&payload[..header.payload_length()])?;
 
     metric_duration(COMM_DESERIALIZE_VERIFY_TIME_ID, start.elapsed());
 
@@ -91,8 +98,8 @@ pub(crate) fn deserialize_message_no_threadpool<RM, PM>(header: Header, payload:
 /// Returns a OneShotRx that can be recv() or awaited depending on whether it's being used
 /// in synchronous or asynchronous workloads.
 /// Also returns the bytes so we can re utilize them for our next operation.
-pub(crate) fn deserialize_message<RM, PM>(header: Header, payload: BytesMut)
-                                          -> OneShotRx<Result<(NetworkMessageKind<RM, PM>, BytesMut)>>
+pub(crate) fn deserialize_message<RM, PM, CM>(header: Header, payload: BytesMut)
+                                              -> OneShotRx<Result<(NetworkMessageKind<RM, PM, CM>, BytesMut)>>
     where RM: Serializable + 'static, PM: Serializable + 'static {
     let (tx, rx) = new_oneshot_channel();
 
@@ -107,14 +114,16 @@ pub(crate) fn deserialize_message<RM, PM>(header: Header, payload: BytesMut)
     rx
 }
 
-pub(crate) fn deserialize_and_push_reconf_message<RM, PM>(header: Header, payload: BytesMut, reconf_handle: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>)
-    where RM: Serializable + 'static, PM: Serializable + 'static {
+pub(crate) fn deserialize_and_push_reconf_message<RM, PM, CM>(header: Header, payload: BytesMut, reconf_handle: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>)
+    where RM: Serializable + 'static,
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     let start = Instant::now();
 
     threadpool::execute(move || {
         metric_duration(THREADPOOL_PASS_TIME_ID, start.elapsed());
 
-        let (message, _) = quiet_unwrap!( deserialize_message_no_threadpool::<RM, PM>(header.clone(), payload));
+        let (message, _) = quiet_unwrap!( deserialize_message_no_threadpool::<RM, PM, CM>(header.clone(), payload));
 
         match message {
             NetworkMessageKind::ReconfigurationMessage(reconf) => {
@@ -125,16 +134,16 @@ pub(crate) fn deserialize_and_push_reconf_message<RM, PM>(header: Header, payloa
     });
 }
 
-pub(crate) fn deserialize_and_push_message<RM, PM>(header: Header, payload: BytesMut,
-                                                   connection: Arc<ConnectedPeer<StoredMessage<PM::Message>>>,
+pub(crate) fn deserialize_and_push_message<RM, PM, CM>(header: Header, payload: BytesMut,
+                                                   connection: Arc<ConnectedPeer<StoredMessage<PM::Message>, StoredMessage<CM::Message>>>,
                                                    reconf_handle: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>)
-    where RM: Serializable + 'static, PM: Serializable + 'static {
+    where RM: Serializable + 'static, PM: Serializable + 'static, CM: Serializable + 'static {
     let start = Instant::now();
 
     threadpool::execute(move || {
         metric_duration(THREADPOOL_PASS_TIME_ID, start.elapsed());
 
-        let (message, _) = quiet_unwrap!(deserialize_message_no_threadpool::<RM, PM>(header.clone(), payload));
+        let (message, _) = quiet_unwrap!(deserialize_message_no_threadpool::<RM, PM, CM>(header.clone(), payload));
 
         match message {
             NetworkMessageKind::ReconfigurationMessage(reconf) => {
@@ -144,7 +153,10 @@ pub(crate) fn deserialize_and_push_message<RM, PM>(header: Header, payload: Byte
                 warn!("MIO does not currently use this (and the only one that uses this function is MIO so....)")
             }
             NetworkMessageKind::System(sys_msg) => {
-                quiet_unwrap!(connection.push_request(StoredMessage::new(header, sys_msg.into())));
+                quiet_unwrap!(connection.push_system_request(StoredMessage::new(header, sys_msg.into())));
+            }
+            NetworkMessageKind::Orderable(cli_msg) => {
+                quiet_unwrap!(connection.push_client_request(StoredMessage::new(header, cli_msg.into())));
             }
         }
     });

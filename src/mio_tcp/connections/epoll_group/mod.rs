@@ -22,10 +22,11 @@ pub type EpollWorkerId = u32;
 // This will just handle creating and deleting connections so it can be small
 pub const DEFAULT_WORKER_CHANNEL: usize = 128;
 
-pub(crate) fn init_worker_group_handle<NI, RM, PM>(worker_count: u32) -> (EpollWorkerGroupHandle<RM, PM>, Vec<ChannelSyncRx<EpollWorkerMessage<RM, PM>>>)
+pub(crate) fn init_worker_group_handle<NI, RM, PM, CM>(worker_count: u32) -> (EpollWorkerGroupHandle<RM, PM, CM>, Vec<ChannelSyncRx<EpollWorkerMessage<RM, PM, CM>>>)
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     let mut workers = Vec::with_capacity(worker_count as usize);
 
     let mut receivers = Vec::with_capacity(worker_count as usize);
@@ -43,10 +44,11 @@ pub(crate) fn init_worker_group_handle<NI, RM, PM>(worker_count: u32) -> (EpollW
     }, receivers)
 }
 
-pub(crate) fn initialize_worker_group<NI, RM, PM>(connections: Arc<Connections<NI, RM, PM>>, receivers: Vec<ChannelSyncRx<EpollWorkerMessage<RM, PM>>>) -> Result<()>
+pub(crate) fn initialize_worker_group<NI, RM, PM, CM>(connections: Arc<Connections<NI, RM, PM, CM>>, receivers: Vec<ChannelSyncRx<EpollWorkerMessage<RM, PM, CM>>>) -> Result<()>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     for (worker_id, rx) in receivers.into_iter().enumerate() {
         let worker = EpollWorker::new(worker_id as u32, connections.clone(), rx)?;
 
@@ -63,37 +65,41 @@ pub(crate) fn initialize_worker_group<NI, RM, PM>(connections: Arc<Connections<N
 
 /// A handle to the worker group that handles the epoll events
 /// Allows us to register new connections to the epoll workers
-pub struct EpollWorkerGroupHandle<RM, PM>
+pub struct EpollWorkerGroupHandle<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
-    workers: Vec<ChannelSyncTx<EpollWorkerMessage<RM, PM>>>,
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
+    workers: Vec<ChannelSyncTx<EpollWorkerMessage<RM, PM, CM>>>,
     round_robin: AtomicUsize,
 }
 
-pub(crate) struct NewConnection<RM, PM>
+pub(crate) struct NewConnection<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     conn_id: u32,
     peer_id: NodeId,
     my_id: NodeId,
     socket: MioSocket,
     reading_info: ReadingBuffer,
     writing_info: Option<WritingBuffer>,
-    peer_conn: Arc<PeerConnection<RM, PM>>,
+    peer_conn: Arc<PeerConnection<RM, PM, CM>>,
 }
 
-pub(crate) enum EpollWorkerMessage<RM, PM>
+pub(crate) enum EpollWorkerMessage<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
-    NewConnection(NewConnection<RM, PM>),
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
+    NewConnection(NewConnection<RM, PM, CM>),
     CloseConnection(Token),
 }
 
-impl<RM, PM> EpollWorkerGroupHandle<RM, PM>
+impl<RM, PM, CM> EpollWorkerGroupHandle<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     /// Assigns a socket to any given worker
-    pub(super) fn assign_socket_to_worker(&self, conn_details: NewConnection<RM, PM>) -> atlas_common::error::Result<()> {
+    pub(super) fn assign_socket_to_worker(&self, conn_details: NewConnection<RM, PM, CM>) -> atlas_common::error::Result<()> {
         let round_robin = self.round_robin.fetch_add(1, Ordering::Relaxed);
 
         let epoll_worker = round_robin % self.workers.len();
@@ -119,9 +125,10 @@ impl<RM, PM> EpollWorkerGroupHandle<RM, PM>
     }
 }
 
-impl<RM, PM> Clone for EpollWorkerGroupHandle<RM, PM>
+impl<RM, PM, CM> Clone for EpollWorkerGroupHandle<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     fn clone(&self) -> Self {
         Self {
             workers: self.workers.clone(),
@@ -135,5 +142,5 @@ pub enum WorkerError {
     #[error("Failed to allocate worker (planned {0:?}) for connection {2} with node {1:?}")]
     FailedToAllocateWorkerForConnection(usize, NodeId, u32),
     #[error("Failed to get the corresponding worker for connection {0:?}, {1:?}")]
-    FailedToGetWorkerForConnection(EpollWorkerId, Token)
+    FailedToGetWorkerForConnection(EpollWorkerId, Token),
 }

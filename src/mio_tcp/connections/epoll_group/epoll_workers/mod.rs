@@ -34,19 +34,20 @@ enum ConnectionWorkResult {
 type ConnectionRegister = ChannelSyncRx<MioSocket>;
 
 /// The information for this worker thread.
-pub(super) struct EpollWorker<NI, RM, PM>
+pub(super) struct EpollWorker<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     // The id of this worker
     worker_id: EpollWorkerId,
     // A reference to our parent connections, so we can update it in case anything goes wrong
     // With any connections
-    global_connections: Arc<Connections<NI, RM, PM>>,
+    global_connections: Arc<Connections<NI, RM, PM, CM>>,
     // This slab stores the connections that are currently being handled by this worker
-    connections: Slab<SocketConnection<RM, PM>>,
+    connections: Slab<SocketConnection<RM, PM, CM>>,
     // register new connections
-    connection_register: ChannelSyncRx<EpollWorkerMessage<RM, PM>>,
+    connection_register: ChannelSyncRx<EpollWorkerMessage<RM, PM, CM>>,
     // The poll instance of this worker
     poll: Poll,
     // Waker
@@ -55,9 +56,10 @@ pub(super) struct EpollWorker<NI, RM, PM>
 }
 
 /// All information related to a given connection
-enum SocketConnection<RM, PM>
+enum SocketConnection<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     PeerConn {
         // The handle of this connection
         handle: ConnHandle,
@@ -69,19 +71,20 @@ enum SocketConnection<RM, PM>
         // Option since we may not be writing anything at the moment
         writing_info: Option<WritingBuffer>,
         // The connection to the peer this connection is a part of
-        connection: Arc<PeerConnection<RM, PM>>,
+        connection: Arc<PeerConnection<RM, PM, CM>>,
     },
     Waker,
 }
 
-impl<NI, RM, PM> EpollWorker<NI, RM, PM>
+impl<NI, RM, PM, CM> EpollWorker<NI, RM, PM, CM>
     where
         NI: NetworkInformationProvider + 'static,
         RM: Serializable + 'static,
-        PM: Serializable + 'static {
+        PM: Serializable + 'static,
+        CM: Serializable + 'static {
     /// Initializing a worker thread for the worker group
-    pub fn new(worker_id: EpollWorkerId, connections: Arc<Connections<NI, RM, PM>>,
-               register: ChannelSyncRx<EpollWorkerMessage<RM, PM>>) -> atlas_common::error::Result<Self> {
+    pub fn new(worker_id: EpollWorkerId, connections: Arc<Connections<NI, RM, PM, CM>>,
+               register: ChannelSyncRx<EpollWorkerMessage<RM, PM, CM>>) -> atlas_common::error::Result<Self> {
         let poll = Poll::new().context(format!("Failed to initialize poll for worker {:?}", worker_id))?;
 
         let mut conn_slab = Slab::with_capacity(DEFAULT_SOCKET_CAPACITY);
@@ -415,7 +418,7 @@ impl<NI, RM, PM> EpollWorker<NI, RM, PM>
         Ok(())
     }
 
-    fn create_connection(&mut self, conn: NewConnection<RM, PM>) -> io::Result<()> {
+    fn create_connection(&mut self, conn: NewConnection<RM, PM, CM>) -> io::Result<()> {
         let NewConnection {
             conn_id, peer_id,
             my_id, mut socket,
@@ -494,18 +497,20 @@ pub fn interrupted(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::Interrupted
 }
 
-impl<RM, PM> NewConnection<RM, PM>
+impl<RM, PM, CM> NewConnection<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     pub fn new(conn_id: u32, peer_id: NodeId, my_id: NodeId, socket: MioSocket, reading_info: ReadingBuffer,
-               writing_info: Option<WritingBuffer>, peer_conn: Arc<PeerConnection<RM, PM>>) -> Self {
+               writing_info: Option<WritingBuffer>, peer_conn: Arc<PeerConnection<RM, PM, CM>>) -> Self {
         Self { conn_id, peer_id, my_id, socket, reading_info, writing_info, peer_conn }
     }
 }
 
-impl<RM, PM> SocketConnection<RM, PM>
+impl<RM, PM, CM> SocketConnection<RM, PM, CM>
     where RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     fn peer_id(&self) -> Option<NodeId> {
         match self {
             SocketConnection::PeerConn { handle, .. } => {

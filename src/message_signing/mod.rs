@@ -26,16 +26,16 @@ pub enum MessageKind {
     Protocol,
 }
 
-pub struct DefaultReconfigSignatureVerifier<RM: Serializable, PM: Serializable, NI: NetworkInformationProvider>(Arc<NI>, PhantomData<(RM, PM)>);
+pub struct DefaultReconfigSignatureVerifier<RM: Serializable, PM: Serializable, CM: Serializable, NI: NetworkInformationProvider>(Arc<NI>, PhantomData<fn() -> (RM, CM, PM)>);
 
-impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSignatureVerifier<RM, PM, NI>
-    where PM: Serializable, RM: Serializable, NI: NetworkInformationProvider + 'static {
+impl<PM, CM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSignatureVerifier<RM, PM, CM, NI>
+    where PM: Serializable, CM: Serializable, RM: Serializable, NI: NetworkInformationProvider + 'static {
     fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: RM::Message) -> Result<RM::Message> {
         let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!( "Could not find public key for peer"))?;
 
         let sig = header.signature();
 
-        let network = NetworkMessageKind::<RM, PM>::from_reconfig(msg);
+        let network = NetworkMessageKind::<RM, PM, CM>::from_reconfig(msg);
 
         let (buf, digest) = cpu_workers::serialize_digest_no_threadpool(&network)?;
 
@@ -59,10 +59,10 @@ impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSign
     }
 }
 
-pub struct DefaultProtocolSignatureVerifier<RM: Serializable, PM: Serializable, NI: NetworkInformationProvider>(Arc<NI>, PhantomData<(RM, PM)>);
+pub struct DefaultProtocolSignatureVerifier<RM: Serializable, PM: Serializable, CM: Serializable, NI: NetworkInformationProvider>(Arc<NI>, PhantomData<(RM, PM)>);
 
-impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSignatureVerifier<RM, PM, NI>
-    where RM: Serializable, PM: Serializable, NI: NetworkInformationProvider + 'static {
+impl<RM, PM, CM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSignatureVerifier<RM, PM, CM, NI>
+    where RM: Serializable, PM: Serializable, CM: Serializable, NI: NetworkInformationProvider + 'static {
     fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: PM::Message) -> Result<PM::Message> {
         let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
 
@@ -85,12 +85,45 @@ impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSign
         let sig = header.signature();
 
         let digest = digest_message(buf.clone())?;
-        
+
         verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
-        
+
         PM::verify_message_internal::<NI, Self>(info_provider, header, msg)
     }
 }
+
+
+impl<RM, PM, CM, NI> NetworkMessageSignatureVerifier<CM, NI> for DefaultProtocolSignatureVerifier<RM, PM, CM, NI>
+    where RM: Serializable, PM: Serializable, CM: Serializable, NI: NetworkInformationProvider + 'static {
+    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: CM::Message) -> Result<CM::Message> {
+        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
+
+        let sig = header.signature();
+
+        let network = NetworkMessageKind::<RM, PM, CM>::from_c_system(msg);
+
+        let (buf, digest) = cpu_workers::serialize_digest_no_threadpool(&network)?;
+
+        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
+
+        CM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_system())?;
+
+        Ok(network.into_c_system())
+    }
+
+    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &CM::Message, buf: &Buf) -> Result<()> {
+        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
+
+        let sig = header.signature();
+
+        let digest = digest_message(buf.clone())?;
+
+        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
+
+        CM::verify_message_internal::<NI, Self>(info_provider, header, msg)
+    }
+}
+
 
 #[deprecated(since = "0.1.0", note = "please use `ReconfigurableNetworkNode` instead")]
 pub struct NodePKShared {

@@ -23,12 +23,13 @@ use super::{Buf};
 const DEFAULT_SERIALIZE_BUFFER_SIZE: usize = 1024;
 
 /// Serialize a wire message into the writer `W`.
-pub fn serialize_message<W, RM, PM>(
+pub fn serialize_message<W, RM, PM, CM>(
     w: &mut W,
-    m: &NetworkMessageKind<RM, PM>,
+    m: &NetworkMessageKind<RM, PM, CM>,
 ) -> Result<()>
     where RM: Serializable,
           PM: Serializable,
+          CM: Serializable,
           W: Write
 {
     let mut root = capnp::message::Builder::new(capnp::message::HeapAllocator::new());
@@ -59,9 +60,9 @@ pub fn serialize_message<W, RM, PM>(
 }
 
 /// Deserialize a message from a reader
-pub fn deserialize_message<R, RM, PM>(
+pub fn deserialize_message<R, RM, PM, CM>(
     r: R
-) -> Result<NetworkMessageKind<RM, PM>> where R: Read, RM: Serializable, PM: Serializable {
+) -> Result<NetworkMessageKind<RM, PM, CM>> where R: Read, RM: Serializable, PM: Serializable, CM: Serializable {
     let mut options = ReaderOptions::new();
 
     options.traversal_limit_in_words(None);

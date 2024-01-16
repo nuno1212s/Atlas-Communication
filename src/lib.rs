@@ -1,10 +1,12 @@
 #![feature(async_fn_in_trait)]
 
 use std::sync::Arc;
+use std::time::Duration;
 use crate::serialize::Serializable;
 use atlas_common::error::*;
 use thiserror::Error;
 use atlas_common::channel::OneShotRx;
+use atlas_common::maybe_vec::MaybeVec;
 use atlas_common::node_id::NodeId;
 use crate::reconfiguration_node::{NetworkInformationProvider, ReconfigurationNode};
 use crate::protocol_node::ProtocolNetworkNode;
@@ -25,11 +27,25 @@ pub mod conn_utils;
 //pub mod tcp_ip_simplex;
 pub mod mio_tcp;
 
+/// Trait for taking requests from the network node
+/// We separate the various sources of requests in order to
+/// allow for better handling of the requests
+pub trait NodeIncomingRqHandler<T>: Send {
+
+    /// Get the pending request count
+    fn pending_rqs(&self) -> usize;
+
+    /// Receive requests in a blocking fashion, until a request has been received, with a given possible timeout
+    fn receive_requests(&self, timeout: Option<Duration>) -> Result<MaybeVec<T>>;
+
+    /// Try to receive the requests without doing any blocking
+    fn try_receive_requests(&self) -> Result<Option<MaybeVec<T>>>;
+}
+
 /// A trait defined that indicates how the connections are managed
 /// Allows us to verify various things about our current connections as well
 /// as establishing new ones.
 pub trait NodeConnections {
-
     /// Are we currently connected to a given node?
     fn is_connected_to_node(&self, node: &NodeId) -> bool;
 
@@ -50,7 +66,6 @@ pub trait NodeConnections {
 }
 
 pub trait NetworkNode {
-
     type ConnectionManager: NodeConnections;
 
     type NetworkInfoProvider: NetworkInformationProvider;
@@ -65,12 +80,13 @@ pub trait NetworkNode {
 }
 
 /// A full network node implementation
-pub trait FullNetworkNode<NI, RM, PM>: ProtocolNetworkNode<PM> + ReconfigurationNode<RM> + Send + Sync
+pub trait FullNetworkNode<NI, RM, PM, CM>:
+    ProtocolNetworkNode<PM> + ReconfigurationNode<RM> + ProtocolNetworkNode<CM> + Send + Sync
     where
         NI: NetworkInformationProvider,
-        RM: Serializable ,
-        PM: Serializable  {
-
+        RM: Serializable,
+        PM: Serializable,
+        CM: Serializable {
     /// The configuration type this node wants to accept
     type Config;
 

@@ -24,7 +24,7 @@ use atlas_common::ordering::{Orderable, SeqNo};
 use crate::serialize::{Buf, Serializable};
 
 // convenience type
-pub type StoredSerializedNetworkMessage<RM, PM> = StoredMessage<SerializedMessage<NetworkMessageKind<RM, PM>>>;
+pub type StoredSerializedNetworkMessage<RM, PM, CM> = StoredMessage<SerializedMessage<NetworkMessageKind<RM, PM, CM>>>;
 
 pub type StoredSerializedProtocolMessage<M> = StoredMessage<SerializedMessage<M>>;
 
@@ -103,25 +103,26 @@ impl<M> Debug for StoredMessage<M> where M: Debug {
 ///
 /// The messages that are going to be sent over the network
 #[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-pub struct NetworkMessage<RM, PM> where RM: Serializable, PM: Serializable {
+pub struct NetworkMessage<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
     pub header: Header,
-    pub message: NetworkMessageKind<RM, PM>,
+    pub message: NetworkMessageKind<RM, PM, CM>,
 }
 
-impl<RM, PM> NetworkMessage<RM, PM> where RM: Serializable, PM: Serializable {
-    pub fn new(header: Header, message: NetworkMessageKind<RM, PM>) -> Self {
+impl<RM, PM, CM> NetworkMessage<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
+    pub fn new(header: Header, message: NetworkMessageKind<RM, PM, CM>) -> Self {
         Self { header, message }
     }
 
-    pub fn into_inner(self) -> (Header, NetworkMessageKind<RM, PM>) {
+    pub fn into_inner(self) -> (Header, NetworkMessageKind<RM, PM, CM>) {
         (self.header, self.message)
     }
 }
 
-impl<RM, PM> From<(Header, NetworkMessageKind<RM, PM>)> for NetworkMessage<RM, PM>
+impl<RM, PM, CM> From<(Header, NetworkMessageKind<RM, PM, CM>)> for NetworkMessage<RM, PM, CM>
     where RM: Serializable,
-          PM: Serializable {
-    fn from(value: (Header, NetworkMessageKind<RM, PM>)) -> Self {
+          PM: Serializable,
+          CM: Serializable {
+    fn from(value: (Header, NetworkMessageKind<RM, PM, CM>)) -> Self {
         NetworkMessage { header: value.0, message: value.1 }
     }
 }
@@ -130,26 +131,30 @@ impl<RM, PM> From<(Header, NetworkMessageKind<RM, PM>)> for NetworkMessage<RM, P
 /// To initialize a System message, you should use the [`From<PM::Message>`] implementation
 /// that is available.
 #[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-pub enum NetworkMessageKind<RM, PM> where PM: Serializable, RM: Serializable {
+pub enum NetworkMessageKind<RM, PM, CM> where PM: Serializable, RM: Serializable, CM: Serializable {
     ReconfigurationMessage(Reconfig<RM::Message>),
     Ping(PingMessage),
     System(System<PM::Message>),
+    Orderable(ClientSys<CM::Message>),
 }
 
-impl<RM, PM> Clone for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
+impl<RM, PM, CM> Clone for NetworkMessageKind<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
     fn clone(&self) -> Self {
         match self {
             NetworkMessageKind::Ping(ping) => { NetworkMessageKind::Ping(ping.clone()) }
             NetworkMessageKind::System(sys) => { NetworkMessageKind::System(sys.clone()) }
+            NetworkMessageKind::Orderable(sys) => { NetworkMessageKind::Orderable(sys.clone()) }
             NetworkMessageKind::ReconfigurationMessage(reconfig) => { NetworkMessageKind::ReconfigurationMessage(reconfig.clone()) }
         }
     }
 }
 
-impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
+impl<RM, PM, CM> NetworkMessageKind<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
     pub fn from_system(msg: PM::Message) -> Self {
         NetworkMessageKind::System(System::from(msg))
     }
+
+    pub fn from_c_system(msg: CM::Message) -> Self { NetworkMessageKind::Orderable(ClientSys::from(msg)) }
 
     pub fn from_reconfig(msg: RM::Message) -> Self {
         NetworkMessageKind::ReconfigurationMessage(Reconfig::from(msg))
@@ -160,9 +165,16 @@ impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable
             NetworkMessageKind::System(sys) => {
                 sys
             }
-            _ => {
-                unreachable!()
+            _ => unreachable!()
+        }
+    }
+
+    pub fn deref_c_system(&self) -> &CM::Message {
+        match self {
+            NetworkMessageKind::Orderable(sys) => {
+                sys
             }
+            _ => unreachable!()
         }
     }
 
@@ -171,9 +183,7 @@ impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable
             NetworkMessageKind::ReconfigurationMessage(reconfig) => {
                 reconfig
             }
-            _ => {
-                unreachable!()
-            }
+            _ => unreachable!()
         }
     }
 
@@ -182,9 +192,7 @@ impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable
             NetworkMessageKind::System(sys_msg) => {
                 sys_msg.inner
             }
-            _ => {
-                unreachable!()
-            }
+            _ => unreachable!()
         }
     }
 
@@ -193,9 +201,16 @@ impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable
             NetworkMessageKind::System(sys_msg) => {
                 sys_msg.inner
             }
-            _ => {
-                unreachable!()
+            _ => unreachable!()
+        }
+    }
+
+    pub fn into_c_system(self) -> CM::Message {
+        match self {
+            NetworkMessageKind::Orderable(ord) => {
+                ord.inner
             }
+            _ => unreachable!()
         }
     }
 
@@ -204,20 +219,24 @@ impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable
             NetworkMessageKind::ReconfigurationMessage(reconfig_msg) => {
                 reconfig_msg.inner
             }
-            _ => {
-                unreachable!()
-            }
+            _ => unreachable!()
         }
     }
 }
 
-impl<RM, PM> From<System<PM::Message>> for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
+impl<RM, PM, CM> From<System<PM::Message>> for NetworkMessageKind<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
     fn from(value: System<PM::Message>) -> Self {
         NetworkMessageKind::System(value)
     }
 }
 
-impl<RM, PM> Debug for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
+impl<RM, PM, CM> From<ClientSys<CM::Message>> for NetworkMessageKind<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
+    fn from(value: ClientSys<CM::Message>) -> Self {
+        NetworkMessageKind::Orderable(value)
+    }
+}
+
+impl<RM, PM, CM> Debug for NetworkMessageKind<RM, PM, CM> where RM: Serializable, PM: Serializable, CM: Serializable {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             NetworkMessageKind::Ping(ping) => {
@@ -229,6 +248,36 @@ impl<RM, PM> Debug for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Se
             NetworkMessageKind::ReconfigurationMessage(_) => {
                 write!(f, "Reconfiguration message")
             }
+            NetworkMessageKind::Orderable(_) => {
+                write!(f, "Orderable message")
+            }
+        }
+    }
+}
+
+/// A client system message, used by clients and replicas in order to communicate
+#[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
+#[derive(Clone)]
+pub struct ClientSys<M: Clone> {
+    inner: M,
+}
+
+impl<M> ClientSys<M> where M: Clone {
+    pub fn into(self) -> M { self.inner }
+}
+
+impl<M: Clone> Deref for ClientSys<M> {
+    type Target = M;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<M: Clone> From<M> for ClientSys<M> {
+    fn from(value: M) -> Self {
+        Self {
+            inner: value
         }
     }
 }
@@ -431,7 +480,7 @@ impl Header {
     /// Deserialize a `Header` from a byte buffer of appropriate size.
     pub fn deserialize_from(buf: &[u8]) -> Result<Self> {
         if buf.len() < Self::LENGTH {
-            return Err!(MessageErrors::InvalidSizeHeader(buf.len()))
+            return Err!(MessageErrors::InvalidSizeHeader(buf.len()));
         }
         Ok(unsafe { Self::deserialize_from_unchecked(buf) })
     }

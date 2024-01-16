@@ -60,17 +60,18 @@ enum PendingConnection {
     ServerToken,
 }
 
-pub struct ServerWorker<NI, RM, PM>
+pub struct ServerWorker<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     my_id: NodeId,
     listener: MioListener,
     registered_conns: Arc<ServerRegisteredPendingConns>,
     currently_accepting: Slab<PendingConnection>,
     conn_handler: Arc<ConnectionHandler>,
     network_info: Arc<NI>,
-    peer_conns: Arc<Connections<NI, RM, PM>>,
+    peer_conns: Arc<Connections<NI, RM, PM, CM>>,
     reconf_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
     network_message_rx: ChannelSyncRx<NetworkUpdate>,
     waker: Arc<Waker>,
@@ -87,16 +88,17 @@ enum ConnectionResult {
     ConnectionBroken,
 }
 
-impl<NI, RM, PM> ServerWorker<NI, RM, PM>
+impl<NI, RM, PM, CM> ServerWorker<NI, RM, PM, CM>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     pub fn new(my_id: NodeId,
                mut listener: MioListener,
                conn_handler: Arc<ConnectionHandler>,
                registered_conns: Arc<ServerRegisteredPendingConns>,
                network_info: Arc<NI>,
-               peer_conns: Arc<Connections<NI, RM, PM>>,
+               peer_conns: Arc<Connections<NI, RM, PM, CM>>,
                reconf_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
                network_message_rx: ChannelSyncRx<NetworkUpdate>) -> Result<Self> {
         let mut slab = Slab::with_capacity(DEFAULT_ALLOWED_CONCURRENT_JOINS);
@@ -579,12 +581,13 @@ impl ConnectionHandler {
         }
     }
 
-    pub fn connect_to_node<NI, RM, PM>(self: &Arc<Self>, connections: Arc<Connections<NI, RM, PM>>,
-                                       peer_id: NodeId, peer_node_type: NodeType, addr: PeerAddr) -> OneShotRx<Result<()>>
+    pub fn connect_to_node<NI, RM, PM, CM>(self: &Arc<Self>, connections: Arc<Connections<NI, RM, PM, CM>>,
+                                           peer_id: NodeId, peer_node_type: NodeType, addr: PeerAddr) -> OneShotRx<Result<()>>
         where
             NI: NetworkInformationProvider + 'static,
             RM: Serializable + 'static,
-            PM: Serializable + 'static {
+            PM: Serializable + 'static,
+            CM: Serializable + 'static {
         let (tx, rx) = channel::new_oneshot_channel();
 
         debug!(" {:?} // Connecting to node {:?} at {:?}", self.my_id(), peer_id, addr);
@@ -702,16 +705,17 @@ impl ConnectionHandler {
     }
 }
 
-pub fn initialize_server<NI, RM, PM>(my_id: NodeId, listener: SyncListener,
-                                     connection_handler: Arc<ConnectionHandler>,
-                                     registered_conns: Arc<ServerRegisteredPendingConns>,
-                                     network_info: Arc<NI>,
-                                     conns: Arc<Connections<NI, RM, PM>>,
-                                     reconfiguration_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
-                                     network_update_channel: ChannelSyncRx<NetworkUpdate>) -> Arc<Waker>
+pub fn initialize_server<NI, RM, PM, CM>(my_id: NodeId, listener: SyncListener,
+                                         connection_handler: Arc<ConnectionHandler>,
+                                         registered_conns: Arc<ServerRegisteredPendingConns>,
+                                         network_info: Arc<NI>,
+                                         conns: Arc<Connections<NI, RM, PM, CM>>,
+                                         reconfiguration_handling: Arc<ReconfigurationMessageHandler<StoredMessage<RM::Message>>>,
+                                         network_update_channel: ChannelSyncRx<NetworkUpdate>) -> Arc<Waker>
     where NI: NetworkInformationProvider + 'static,
           RM: Serializable + 'static,
-          PM: Serializable + 'static {
+          PM: Serializable + 'static,
+          CM: Serializable + 'static {
     let server_worker = ServerWorker::new(my_id.clone(),
                                           listener.into(),
                                           connection_handler.clone(),
@@ -782,5 +786,5 @@ pub enum ConnectionEstablishError {
     #[error("Failed to connect to node {0:?} as we are already connecting to that node")]
     AlreadyConnectingToNode(NodeId),
     #[error("Failed to connect to node {0:?}")]
-    FailedToConnectToNode(NodeId)
+    FailedToConnectToNode(NodeId),
 }

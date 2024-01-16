@@ -1,6 +1,6 @@
 use crate::message::{StoredMessage};
 use crate::serialize::Serializable;
-use crate::{NetworkNode, NodeConnections};
+use crate::{NetworkNode, NodeConnections, NodeIncomingRqHandler};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::error::*;
@@ -11,6 +11,8 @@ use atlas_common::channel;
 use std::sync::{Arc};
 use std::time::Duration;
 use anyhow::anyhow;
+use chrono::Month::May;
+use atlas_common::maybe_vec::MaybeVec;
 
 /// Represents the network information that a node needs to know about other nodes
 pub trait NetworkInformationProvider: Send + Sync {
@@ -37,16 +39,6 @@ pub trait NetworkInformationProvider: Send + Sync {
     fn get_addr_for_node(&self, node: &NodeId) -> Option<PeerAddr>;
 }
 
-/// Handling of incoming requests
-pub trait ReconfigurationIncomingHandler<T> {
-    /// Receive a reconfiguration message from other nodes
-    fn receive_reconfig_message(&self) -> Result<T>;
-
-    /// Try to receive a reconfiguration message from other nodes
-    /// If no messages are already available at the time of the call, then it will return None
-    fn try_receive_reconfig_message(&self, timeout: Option<Duration>) -> Result<Option<T>>;
-}
-
 /// The reconfiguration network update trait, to send updates about newly discovered
 /// nodes to the networking layer. This is because when a new node connects to us and
 /// we don't know about it, it will be left in a pending state until we receive a
@@ -60,7 +52,7 @@ pub trait ReconfigurationNetworkUpdate {
 pub trait ReconfigurationNode<M>: NetworkNode + Send + Sync 
     where M: Serializable {
     
-    type IncomingReconfigRqHandler: ReconfigurationIncomingHandler<StoredMessage<M::Message>>;
+    type IncomingReconfigRqHandler: NodeIncomingRqHandler<StoredMessage<M::Message>>;
 
     type ReconfigurationNetworkUpdate: ReconfigurationNetworkUpdate;
 
@@ -149,22 +141,21 @@ impl<T> ReconfigurationMessageHandler<T> {
     }
 }
 
-impl<T> ReconfigurationIncomingHandler<T> for ReconfigurationMessageHandler<T> {
-    fn receive_reconfig_message(&self) -> Result<T> {
-        self.reconfiguration_message_handling.1.recv()
+impl<T> NodeIncomingRqHandler<T> for ReconfigurationMessageHandler<T> {
+    fn pending_rqs(&self) -> usize {
+        todo!()
     }
 
-    fn try_receive_reconfig_message(&self, timeout: Option<Duration>) -> Result<Option<T>> {
-        if let Some(timeout) = timeout
-        {
+    fn receive_requests(&self, timeout: Option<Duration>) -> Result<MaybeVec<T>> {
+        if let Some(timeout) = timeout {
             match self.reconfiguration_message_handling.1.recv_timeout(timeout) {
                 Ok(msg) => {
-                    Ok(Some(msg))
+                    Ok(MaybeVec::from_one(msg))
                 }
                 Err(err) => {
                     match err {
                         TryRecvError::ChannelEmpty | TryRecvError::Timeout => {
-                            Ok(None)
+                            Ok(MaybeVec::None)
                         }
                         TryRecvError::ChannelDc => {
                             Err(anyhow!("Reconfig message channel has disconnected?"))
@@ -173,18 +164,29 @@ impl<T> ReconfigurationIncomingHandler<T> for ReconfigurationMessageHandler<T> {
                 }
             }
         } else {
-            match self.reconfiguration_message_handling.1.try_recv() {
+            match self.reconfiguration_message_handling.1.recv() {
                 Ok(msg) => {
-                    Ok(Some(msg))
+                    Ok(MaybeVec::from_one(msg))
                 }
-                Err(err) => {
-                    match err {
-                        TryRecvError::ChannelEmpty | TryRecvError::Timeout => {
-                            Ok(None)
-                        }
-                        TryRecvError::ChannelDc => {
-                            Err(anyhow!("Reconfig message channel has disconnected?"))
-                        }
+                Err(_) => {
+                    Err(anyhow!("Reconfig message channel has disconnected?"))
+                }
+            }
+        }
+    }
+
+    fn try_receive_requests(&self) -> Result<Option<MaybeVec<T>>> {
+        match self.reconfiguration_message_handling.1.try_recv() {
+            Ok(msg) => {
+                Ok(Some(MaybeVec::from_one(msg)))
+            }
+            Err(err) => {
+                match err {
+                    TryRecvError::ChannelEmpty | TryRecvError::Timeout => {
+                        Ok(None)
+                    }
+                    TryRecvError::ChannelDc => {
+                        Err(anyhow!("Reconfig message channel has disconnected?"))
                     }
                 }
             }

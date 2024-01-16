@@ -1,37 +1,16 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
+
 use thiserror::Error;
+
 use atlas_common::crypto::hash::Digest;
-use atlas_common::node_id::NodeId;
 use atlas_common::error::*;
-use crate::{NetworkNode, NodeConnections};
+use atlas_common::node_id::NodeId;
+
+use crate::{NetworkNode, NodeIncomingRqHandler};
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedProtocolMessage};
 use crate::message_signing::NetworkMessageSignatureVerifier;
-use crate::reconfiguration_node::NetworkInformationProvider;
 use crate::serialize::Serializable;
-
-/// Trait for taking requests from the network node
-/// We separate the various sources of requests in order to
-/// allow for better handling of the requests
-pub trait NodeIncomingRqHandler<T>: Send {
-
-    /// How many requests are currently in the queue from clients
-    fn rqs_len_from_clients(&self) -> usize;
-
-    /// Receive requests from clients, block if there are no available requests
-    fn receive_from_clients(&self, timeout: Option<Duration>) -> Result<Vec<T>>;
-
-    /// Try to receive requests from clients, does not block if there are no available requests
-    fn try_receive_from_clients(&self) -> Result<Option<Vec<T>>>;
-
-    /// Get the amount of pending requests from replicas
-    fn rqs_len_from_replicas(&self) -> usize;
-
-    /// Receive requests from replicas, block if there are no available requests until an optional
-    /// provided timeout
-    fn receive_from_replicas(&self, timeout: Option<Duration>) -> Result<Option<T>>;
-}
 
 /// A Network node devoted to handling
 pub trait ProtocolNetworkNode<M>: NetworkNode +  Send + Sync where M: Serializable {
