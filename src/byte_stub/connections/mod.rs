@@ -4,7 +4,7 @@ use atlas_common::error::*;
 /// The byte level connection controller definitions
 ///
 /// This defines the necessary methods to provide connections to other peers
-pub trait ByteNetworkConnectionController: Send + Sync + Clone {
+pub trait ByteNetworkConnectionController: Send + Sync {
 
     /// Check if we are connected to a given node
     fn has_connection(&self, node: &NodeId) -> bool;

@@ -23,23 +23,33 @@ use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 
 pub(crate) mod incoming;
 pub(crate) mod outgoing;
-mod connections;
+pub mod connections;
 
 pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 
 /// The byte network controller.
-pub trait ByteNetworkController<NI>: Send + Sync + Clone {
+/// The generics are meant for:
+/// NI: NetworkInformationProvider
+/// NSC: The Node stub controller
+/// BS: The byte network stub, which is connection oriented
+/// IS: The incoming stub, which is connection oriented
+pub trait ByteNetworkController<NI, NSC, BS, IS>: Send + Sync + Clone {
+
+    ///  The configuration type
+    type Config: Send + 'static;
+
     /// The connection controller type, used to instruct the byte network layer
     /// to query the network level connections
     type ConnectionController: ByteNetworkConnectionController;
 
-    fn initialize_controller<BS, IS>(network_info: Arc<NI>, stub_controllers: impl NodeStubController<BS, IS>) -> Self
+    fn initialize_controller(network_info: Arc<NI>, config: Self::Config, stub_controllers: NSC) -> Self
         where Self: Sized,
               NI: NetworkInformationProvider,
-              BS: ByteNetworkStub, IS: NodeIncomingStub;
+              BS: ByteNetworkStub, IS: NodeIncomingStub,
+              NSC: NodeStubController<BS, IS>;
 
     /// Get the reference to this controller's connection controller
-    fn connection_controller(&self) -> &Self::ConnectionController;
+    fn connection_controller(&self) -> &Arc<Self::ConnectionController>;
 }
 
 /// The network stub for byte messages (after they have gone through the serialization process)
@@ -85,7 +95,8 @@ pub trait NodeStubController<BS, IS>: Send + Sync + Clone {
 pub trait NodeIncomingStub: Send + Sync + Clone {
     /// Handle a binary message being received, sent from the peer this stub is responsible for.
     /// This should trigger all necessary actions to handle the message. (Deserialization, signature verification, etc.)
-    fn handle_message(&self, message: WireMessage) -> Result<()>;
+    fn handle_message<NI>(&self, network_info: &Arc<NI>, message: WireMessage) -> Result<()>
+        where NI: NetworkInformationProvider + 'static;
 }
 
 /// The map of endpoints, connecting each MessageModule with the given
@@ -182,6 +193,8 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
         })
     }
 
+    /// Initialize an incoming connection for a given node
+    /// This will initialize all the stubs required to handle messages from that node
     pub fn initialize_incoming_connection_for(&self, node_id: NodeId) -> Result<PeerIncomingConnection<R, O, S, A, L>>
         where L: LookupTable<R, O, S, A> {
         let lookup_table = self.lookup_table.clone();
@@ -201,12 +214,15 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
         Ok(PeerIncomingConnection::initialize_incoming_conn(lookup_table, table))
     }
 
+    /// Initialize an outgoing connection for a given node, given a byte level stub to that
+    /// node (which is connection oriented)
     pub fn initialize_outgoing_connection_for(&self, _node_id: NodeId, node_stub: CN) -> Result<PeerOutgoingConnection<CN, R, O, S, A>> {
         let connection = PeerOutgoingConnection::OutgoingStub(node_stub);
 
         Ok(connection)
     }
 
+    /// Initialize a connection to a given peer
     pub fn initialize_connection(&self, node: NodeId, node_stub: CN)
                                  -> Result<PeerConnection<CN, R, O, S, A, L>> where L: LookupTable<R, O, S, A> {
         Ok(PeerConnection {

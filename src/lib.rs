@@ -8,7 +8,8 @@ use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use atlas_common::prng::ThreadSafePrng;
 
-use crate::byte_stub::{ByteNetworkController, ByteNetworkStub, PeerConnectionManager};
+use crate::byte_stub::{ByteNetworkController, ByteNetworkStub, PeerConnection, PeerConnectionManager};
+use crate::byte_stub::incoming::PeerIncomingConnection;
 use crate::lookup_table::EnumLookupTable;
 use crate::reconfiguration_node::NetworkInformationProvider;
 use crate::serialization::Serializable;
@@ -19,8 +20,8 @@ pub mod stub;
 pub mod message;
 pub mod reconfiguration_node;
 pub mod lookup_table;
+pub mod serialization;
 mod message_signing;
-mod serialization;
 mod message_ingestion;
 mod metrics;
 mod message_outgoing;
@@ -61,8 +62,9 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
           BN: Clone {
-    pub fn initialize(network_info: Arc<NI>) -> Result<Arc<Self>>
-        where BN: ByteNetworkController<NI>,
+
+    pub fn initialize(network_info: Arc<NI>, config: BN::Config) -> Result<Arc<Self>>
+        where BN: ByteNetworkController<NI, PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>, CN, PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>>,
               NI: NetworkInformationProvider,
               CN: ByteNetworkStub {
         let our_id = network_info.get_own_id();
@@ -74,7 +76,7 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
 
         let connection_controller = PeerConnectionManager::initialize(our_id, our_type, lookup_table, rng.clone())?;
 
-        let network_controller = BN::initialize_controller(network_info.clone(), connection_controller.clone());
+        let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone());
 
         Ok(Arc::new(Self {
             id: our_id,

@@ -12,6 +12,7 @@ use crate::message::{Header, StoredMessage, WireMessage};
 use crate::{lookup_table, message_ingestion};
 use crate::byte_stub::incoming::pooled_stub::{ConnectedPeersGroup, PooledStubOutput};
 use crate::config::ClientPoolConfig;
+use crate::reconfiguration_node::NetworkInformationProvider;
 use crate::serialization::Serializable;
 
 pub(crate) mod unpooled_stub;
@@ -99,12 +100,14 @@ impl<R, O, S, A, L> NodeIncomingStub for PeerIncomingConnection<R, O, S, A, L>
     where L: LookupTable<R, O, S, A> + 'static,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static {
-    fn handle_message(&self, message: WireMessage) -> Result<()> {
+    fn handle_message<NI>(&self, network_info: &Arc<NI>, message: WireMessage) -> Result<()>
+        where NI: NetworkInformationProvider + 'static {
         let lookup_table = self.lookup_table.clone();
         let peer_stub_lookup = self.stub_lookup.clone();
+        let network_info = network_info.clone();
 
         atlas_common::threadpool::execute(move || {
-            quiet_unwrap!(message_ingestion::process_wire_message_message(message, lookup_table, peer_stub_lookup));
+            quiet_unwrap!(message_ingestion::process_wire_message_message(message, &*network_info, &lookup_table, &peer_stub_lookup));
         });
 
         Ok(())
@@ -137,11 +140,28 @@ impl<R, O, S, A> PeerStubController<R, O, S, A>
         let mut stub_output = Vec::new();
 
         for message_mod in MessageModule::iter() {
-            let (controller, output) = generate_stub_controller_for(my_id, node_type, message_mod)?;
+            let (controller, output) = match message_mod {
+                MessageModule::Reconfiguration => {
+                    let (controller, output) = generate_stub_controller_for::<R::Message>(my_id, node_type, message_mod)?;
 
-            //TODO: We have to wrap this correctly. This will be kind of ugly
-            let controller = PerMessageModStubController::Application(controller);
-            let output = ModuleStubEndPoint::Application(output);
+                    (PerMessageModStubController::Reconfiguration(controller), ModuleStubEndPoint::Reconfiguration(output))
+                }
+                MessageModule::Protocol => {
+                    let (controller, output) = generate_stub_controller_for::<O::Message>(my_id, node_type, message_mod)?;
+
+                    (PerMessageModStubController::Protocol(controller), ModuleStubEndPoint::Protocol(output))
+                }
+                MessageModule::StateProtocol => {
+                    let (controller, output) = generate_stub_controller_for::<S::Message>(my_id, node_type, message_mod)?;
+
+                    (PerMessageModStubController::StateProtocol(controller), ModuleStubEndPoint::StateProtocol(output))
+                }
+                MessageModule::Application => {
+                    let (controller, output) = generate_stub_controller_for::<A::Message>(my_id, node_type, message_mod)?;
+
+                    (PerMessageModStubController::Application(controller), ModuleStubEndPoint::Application(output))
+                }
+            };
 
             controllers.push(controller);
             stub_output.push(output);

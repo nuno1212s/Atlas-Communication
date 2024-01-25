@@ -149,7 +149,7 @@ impl<'de> serde::Deserialize<'de> for Header {
 
 /// A message to be sent over the wire. The payload should be a serialized
 /// `SystemMessage`, for correctness.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WireMessage {
     pub(crate) header: Header,
     pub(crate) message_mod: MessageModule,
@@ -325,7 +325,7 @@ impl WireMessage {
         Self {
             header,
             message_mod,
-            payload
+            payload,
         }
     }
 
@@ -349,29 +349,15 @@ impl WireMessage {
         &self.payload
     }
 
+    /// Returns a reference to the payload bytes of the `WireMessage`.
+    pub fn payload_buf(&self) -> &Buf {
+        &self.payload
+    }
+
     /// Checks for the correctness of the `WireMessage`. This implies
     /// checking its signature, if a `PublicKey` is provided.
     pub fn is_valid(&self, public_key: Option<&PublicKey>, check_payload_len: bool) -> bool {
-        let preliminary_check_failed =
-            self.header.version != WireMessage::CURRENT_VERSION
-                || (check_payload_len && self.header.length != self.payload.len() as u64);
-
-        if preliminary_check_failed {
-            return false;
-        }
-
-        public_key
-            .map(|pk| {
-                crate::message_signing::verify_parts(
-                    pk,
-                    self.header.signature(),
-                    self.header.from,
-                    self.header.to,
-                    self.header.nonce,
-                    &self.header.digest[..],
-                ).is_ok()
-            })
-            .unwrap_or(true)
+        verify_validity(&self.header, &self.payload, check_payload_len, public_key)
     }
 
     /// Serialize a `WireMessage` into an async writer.
@@ -409,6 +395,29 @@ impl WireMessage {
 
         Ok(())
     }
+}
+
+pub fn verify_validity(header: &Header, message: &Buf, check_payload_len: bool, public_key: Option<&PublicKey>) -> bool {
+    let preliminary_check_failed =
+        header.version != WireMessage::CURRENT_VERSION
+            || (check_payload_len && header.length != message.len() as u64);
+
+    if preliminary_check_failed {
+        return false;
+    }
+
+    public_key
+        .map(|pk| {
+            crate::message_signing::verify_parts(
+                pk,
+                header.signature(),
+                header.from,
+                header.to,
+                header.nonce,
+                &header.digest[..],
+            ).is_ok()
+        })
+        .unwrap_or(true)
 }
 
 impl Debug for Header {
