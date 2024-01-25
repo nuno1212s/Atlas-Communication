@@ -6,8 +6,9 @@ use bytes::Bytes;
 use atlas_common::crypto::hash::Digest;
 use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
+use crate::byte_stub::ByteNetworkStub;
 
-use crate::lookup_table::ModMessageWrapped;
+use crate::lookup_table::{LookupTable, ModMessageWrapped};
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedMessage};
 use crate::message_outgoing::{send_message_to_targets, send_serialized_message_to_target};
 use crate::reconfiguration_node::NetworkInformationProvider;
@@ -15,11 +16,11 @@ use crate::serialization;
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, ModuleOutgoingStub, OperationStub, ReconfigurationStub, StateProtocolStub};
 
-impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<R::Message> for ReconfigurationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationStub<NI, CN, BN, R, O, S, A>
     where NI: NetworkInformationProvider,
-          R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone {
+          R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, CN: ByteNetworkStub+ 'static {
     fn send(&self, message: R::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
@@ -80,7 +81,7 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<R::Message> for Reconfigurati
 
         let digest = serialization::serialize_digest::<Vec<u8>, R>(&message, &mut buf)?;
 
-        Ok((SerializedMessage::new(Bytes::from(buf), message), digest))
+        Ok((SerializedMessage::new(message, Bytes::from(buf)), digest))
     }
 
     fn broadcast_serialized(&self, messages: BTreeMap<NodeId, StoredSerializedMessage<R::Message>>) -> std::result::Result<(), Vec<NodeId>> {
@@ -93,17 +94,18 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<R::Message> for Reconfigurati
 
             let serialized_message = SerializedMessage::new(wrapped_message, buf);
 
-            send_serialized_message_to_target::<CN, R, O, S, A, L>(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<O::Message> for OperationStub<NI, CN, BN, R, O, S, A, L>
-    where NI: NetworkInformationProvider, R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone {
+impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI, CN, BN, R, O, S, A>
+    where NI: NetworkInformationProvider,
+          R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, CN: ByteNetworkStub + 'static, {
     fn send(&self, message: O::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
@@ -164,7 +166,7 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<O::Message> for OperationStub
 
         let digest = serialization::serialize_digest::<Vec<u8>, O>(&message, &mut buf)?;
 
-        Ok((SerializedMessage::new(Bytes::from(buf), message), digest))
+        Ok((SerializedMessage::new(message, Bytes::from(buf)), digest))
     }
 
     fn broadcast_serialized(&self, messages: BTreeMap<NodeId, StoredSerializedMessage<O::Message>>) -> std::result::Result<(), Vec<NodeId>> {
@@ -179,17 +181,18 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<O::Message> for OperationStub
 
             let rng = self.network_management.rng();
 
-            send_serialized_message_to_target::<CN, R, O, S, A, L>(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<S::Message> for StateProtocolStub<NI, CN, BN, R, O, S, A, L>
-    where NI: NetworkInformationProvider, R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone {
+impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStub<NI, CN, BN, R, O, S, A>
+    where NI: NetworkInformationProvider,
+          R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, CN: ByteNetworkStub+ 'static {
     fn send(&self, message: S::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
@@ -250,7 +253,7 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<S::Message> for StateProtocol
 
         let digest = serialization::serialize_digest::<Vec<u8>, S>(&message, &mut buf)?;
 
-        Ok((SerializedMessage::new(Bytes::from(buf), message), digest))
+        Ok((SerializedMessage::new(message, Bytes::from(buf)), digest))
     }
 
     fn broadcast_serialized(&self, messages: BTreeMap<NodeId, StoredSerializedMessage<S::Message>>) -> std::result::Result<(), Vec<NodeId>> {
@@ -265,17 +268,18 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<S::Message> for StateProtocol
 
             let rng = self.network_management.rng();
 
-            send_serialized_message_to_target::<CN, R, O, S, A, L>(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<A::Message> for ApplicationStub<NI, CN, BN, R, O, S, A, L>
-    where NI: NetworkInformationProvider, R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone {
+impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<NI, CN, BN, R, O, S, A>
+    where NI: NetworkInformationProvider,
+          R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, CN: ByteNetworkStub+ 'static {
     fn send(&self, message: A::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
@@ -336,7 +340,7 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<A::Message> for ApplicationSt
 
         let digest = serialization::serialize_digest::<Vec<u8>, A>(&message, &mut buf)?;
 
-        Ok((SerializedMessage::new(Bytes::from(buf), message), digest))
+        Ok((SerializedMessage::new(message, Bytes::from(buf)), digest))
     }
 
     fn broadcast_serialized(&self, messages: BTreeMap<NodeId, StoredSerializedMessage<A::Message>>) -> std::result::Result<(), Vec<NodeId>> {
@@ -351,7 +355,7 @@ impl<NI, CN, BN, R, O, S, A, L> ModuleOutgoingStub<A::Message> for ApplicationSt
 
             let rng = self.network_management.rng();
 
-            send_serialized_message_to_target::<CN, R, O, S, A, L>(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())

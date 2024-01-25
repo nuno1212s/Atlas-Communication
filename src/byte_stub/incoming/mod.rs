@@ -10,7 +10,7 @@ use crate::byte_stub::{ByteNetworkStub, from_arr, NodeIncomingStub, NodeStubCont
 use crate::lookup_table::{LookupTable, MessageInputStubs, MessageModule};
 use crate::message::{Header, StoredMessage, WireMessage};
 use crate::{lookup_table, message_ingestion};
-use crate::byte_stub::incoming::pooled_stub::ConnectedPeersGroup;
+use crate::byte_stub::incoming::pooled_stub::{ConnectedPeersGroup, PooledStubOutput};
 use crate::config::ClientPoolConfig;
 use crate::serialization::Serializable;
 
@@ -41,11 +41,9 @@ pub enum PerMessageModStubController<R, O, S, A>
 
 /// The possible controllers for stubs
 pub enum PeerStubControllers<M> where M: Send {
-    Unpooled(unpooled_stub::UnpooledStubManagement<M>),
+    Unpooled(unpooled_stub::UnpooledStubManagement<StoredMessage<M>>),
     Pooled(Arc<pooled_stub::ConnectedPeersGroup<StoredMessage<M>>>),
 }
-
-
 
 /// The input lookup table for a given peer
 pub struct PeerStubLookupTable<R, O, S, A>
@@ -64,7 +62,7 @@ pub struct PeerIncomingConnection<R, O, S, A, L>
 
 /// The stub for a given peer
 pub enum InternalStubTX<M> where M: Send {
-    Unpooled(unpooled_stub::UnpooledStubTX<M>),
+    Unpooled(unpooled_stub::UnpooledStubTX<StoredMessage<M>>),
     Pooled(pooled_stub::ClientPeer<StoredMessage<M>>),
 }
 
@@ -98,9 +96,9 @@ impl<R, O, S, A, L> PeerIncomingConnection<R, O, S, A, L>
 /// Implementation of the function that handles the message coming from the byte layer
 /// and pushes it to the appropriate stub
 impl<R, O, S, A, L> NodeIncomingStub for PeerIncomingConnection<R, O, S, A, L>
-    where L: LookupTable<R, O, S, A>,
-          R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+    where L: LookupTable<R, O, S, A> + 'static,
+          R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static {
     fn handle_message(&self, message: WireMessage) -> Result<()> {
         let lookup_table = self.lookup_table.clone();
         let peer_stub_lookup = self.stub_lookup.clone();
@@ -134,12 +132,16 @@ impl<R, O, S, A> lookup_table::PeerStubLookupTable<R, O, S, A> for PeerStubLooku
 impl<R, O, S, A> PeerStubController<R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
-    pub fn initialize_controller(my_id: NodeId, node_type: NodeType) -> (Self, PeerStubEndpoints<R, O, S, A>) {
+    pub fn initialize_controller(my_id: NodeId, node_type: NodeType) -> Result<(Self, PeerStubEndpoints<R, O, S, A>)> {
         let mut controllers = Vec::new();
         let mut stub_output = Vec::new();
 
         for message_mod in MessageModule::iter() {
             let (controller, output) = generate_stub_controller_for(my_id, node_type, message_mod)?;
+
+            //TODO: We have to wrap this correctly. This will be kind of ugly
+            let controller = PerMessageModStubController::Application(controller);
+            let output = ModuleStubEndPoint::Application(output);
 
             controllers.push(controller);
             stub_output.push(output);
@@ -148,11 +150,11 @@ impl<R, O, S, A> PeerStubController<R, O, S, A>
         let map = EnumMap::from_array(from_arr::<_, MODULES>(controllers)?);
         let output_map = EnumMap::from_array(from_arr::<_, MODULES>(stub_output)?);
 
-        (Self {
+        Ok((Self {
             stub_controller_map: map,
         }, PeerStubEndpoints {
             stub_output_map: output_map,
-        })
+        }))
     }
 
     pub(super) fn get_stub_controller_for(&self, module: &MessageModule) -> &PerMessageModStubController<R, O, S, A> {
@@ -161,7 +163,7 @@ impl<R, O, S, A> PeerStubController<R, O, S, A>
 }
 
 impl<M> PeerStubControllers<M>
-    where M: Send {
+    where M: Send + 'static {
     fn initialize_stub_for(&self, node: NodeId) -> InternalStubTX<M> {
         match self {
             PeerStubControllers::Unpooled(unpooled_stub_controller) => {
@@ -237,7 +239,7 @@ impl<M> Clone for InternalStubTX<M> where M: Send {
 /// This yields a new stub controller and the corresponding end point where
 /// modules can then receive their respective messages
 fn generate_stub_controller_for<M>(my_id: NodeId, my_node_type: NodeType, message_mod: MessageModule) -> Result<(PeerStubControllers<M>, StubEndpoint<M>)>
-    where M: Send {
+    where M: Send + 'static {
     match my_node_type {
         NodeType::Replica => {
             match message_mod {
@@ -254,11 +256,11 @@ fn generate_stub_controller_for<M>(my_id: NodeId, my_node_type: NodeType, messag
 
                     let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some("Pooled stub"));
 
-                    let stub_control = ConnectedPeersGroup::new(config, tx, rx, my_id);
+                    let stub_control = ConnectedPeersGroup::new(config, tx, rx.clone(), my_id);
 
                     let peer_stub_control = PeerStubControllers::Pooled(stub_control);
 
-                    Ok((peer_stub_control, StubEndpoint::Pooled(stub_control.get_output())))
+                    Ok((peer_stub_control, StubEndpoint::Pooled(PooledStubOutput::from(rx))))
                 }
             }
         }

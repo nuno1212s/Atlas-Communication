@@ -15,13 +15,13 @@ use crate::stub::ModuleIncomingStub;
 /// In the case of unpooled stubs, we don't need to maintain a connection map, since we don't
 /// distinguish where the message came from. They all end up in the same channel.
 pub struct UnpooledStubManagement<M> {
-    tx: ChannelSyncTx<StoredMessage<M>>,
+    tx: ChannelSyncTx<M>,
 }
 
 impl<M> UnpooledStubManagement<M> {
 
     pub fn initialize_controller(config: UnpooledConnection) -> (Self, UnpooledStubRX<M>) {
-        let (tx, rx) = channel::new_bounded_sync(config.pool_size(), Some("Unpooled stub"));
+        let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some("Unpooled stub"));
 
         (Self {
             tx
@@ -40,16 +40,16 @@ impl<M> UnpooledStubManagement<M> {
 /// An unpooled stub, meant for connections with not a lot of throughput but
 /// very latency sensitive
 pub struct UnpooledStubRX<M> {
-    rx: ChannelSyncRx<StoredMessage<M>>,
+    rx: ChannelSyncRx<M>,
 }
 
 /// The send side of this stub type
 pub struct UnpooledStubTX<M> {
-    tx: ChannelSyncTx<StoredMessage<M>>,
+    tx: ChannelSyncTx<M>,
 }
 
 impl<M> Deref for UnpooledStubTX<M> {
-    type Target = ChannelSyncTx<StoredMessage<M>>;
+    type Target = ChannelSyncTx<M>;
 
     fn deref(&self) -> &Self::Target {
         &self.tx
@@ -72,7 +72,7 @@ impl<M> Clone for UnpooledStubRX<M> {
     }
 }
 
-impl<T> ModuleIncomingStub<T> for UnpooledStubRX<T> where T: Send {
+impl<T> ModuleIncomingStub<T> for UnpooledStubRX<StoredMessage<T>> where T: Send {
 
     fn pending_rqs(&self) -> usize {
         self.rx.len()

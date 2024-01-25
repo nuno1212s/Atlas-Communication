@@ -22,6 +22,12 @@ impl<M> Clone for PooledStubOutput<M> {
     }
 }
 
+impl<M> From<ChannelSyncRx<ClientRqBatchOutput<M>>> for PooledStubOutput<M> {
+    fn from(value: ChannelSyncRx<ClientRqBatchOutput<M>>) -> Self {
+        Self(value)
+    }
+}
+
 pub type ClientRqBatchOutput<T> = (Vec<T>, Instant);
 
 pub type ClientPeer<T> = Arc<ConnectedClientPeer<T>>;
@@ -78,7 +84,7 @@ pub struct ConnectedPeersPool<T: Send> {
     batch_sleep_micros: u64,
 }
 
-impl<T> ConnectedPeersGroup<T> where T: Send {
+impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
 
     pub fn new(client_pool_config: ClientPoolConfig,
                batch_transmission: ChannelSyncTx<ClientRqBatchOutput<T>>,
@@ -200,7 +206,7 @@ impl<T> ConnectedPeersGroup<T> where T: Send {
     }
 }
 
-impl<T> ConnectedPeersPool<T> where T: Send {
+impl<T> ConnectedPeersPool<T> where T: Send + 'static {
     //We mark the owner as static since if the pool is active then
     //The owner also has to be active
     pub fn new(pool_id: usize, batch_size: usize, batch_transmission: ChannelSyncTx<ClientRqBatchOutput<T>>,
@@ -481,7 +487,7 @@ pub enum SendPeerError {
     AttemptToPushClientMessageToReplicaConn(NodeId),
 }
 
-impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<M> {
+impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<StoredMessage<M>> {
     fn receive_messages(&self) -> atlas_common::error::Result<Vec<StoredMessage<M>>> {
         self.0.recv().map(|(vec, _)| vec)
     }

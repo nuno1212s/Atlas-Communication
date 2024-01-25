@@ -7,7 +7,9 @@ use crate::serialization::{deserialize_message, Serializable};
 /// Process a message received from the byte layer of the network.
 /// Requires the lookup table to be able to get the appropriate type to deserialize the message.
 /// Then, stubs are retrieved from the peer stub lookup table and the message is pushed to the appropriate stub.
-pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage, lookup_table: impl LookupTable<R, O, S, A>, stubs: impl PeerStubLookupTable<R, O, S, A>) -> Result<()>
+pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage,
+                                                       lookup_table: impl LookupTable<R, O, S, A>,
+                                                       stubs: impl PeerStubLookupTable<R, O, S, A>) -> Result<()>
     where R: Serializable,
           O: Serializable,
           S: Serializable,

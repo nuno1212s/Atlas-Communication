@@ -70,3 +70,13 @@ impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
     }
 
 }
+
+impl<R, O, S, A> Clone for LoopbackOutgoingStub<R, O, S, A>
+    where R: Serializable, O: Serializable,
+          S: Serializable, A: Serializable  {
+    fn clone(&self) -> Self {
+        Self {
+            loopback_stubs: self.loopback_stubs.clone(),
+        }
+    }
+}

@@ -5,7 +5,7 @@ use std::time::Duration;
 use atlas_common::crypto::hash::Digest;
 use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
-use crate::byte_stub::{ModuleStubEndPoint, StubEndpoint};
+use crate::byte_stub::{ByteNetworkStub, ModuleStubEndPoint, StubEndpoint};
 use crate::lookup_table::MessageModule;
 
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedMessage};
@@ -112,33 +112,31 @@ pub trait BatchedNetworkStub<T>: NetworkStub<T> where T: Serializable {
 /// In reality, this should all be macros, but I'm not into the macro scene
 /// And I can't take the time to learn it atm
 /// Reconfiguration stub
-pub struct ReconfigurationStub<NI, CN, BN, R, O, S, A, L>
+pub struct ReconfigurationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
     stub_endpoint: StubEndpoint<R::Message>,
-    _p: PhantomData<fn() -> L>,
 }
 
-impl<NI, CN, BN, R, O, S, A, L> ReconfigurationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> ReconfigurationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
-        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Reconfiguration);
+        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Reconfiguration).clone();
 
         let end_point = end_point.into_reconfig_endpoint();
 
         Self {
             network_management,
             stub_endpoint: end_point,
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> Clone for ReconfigurationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> Clone for ReconfigurationStub<NI, CN, BN, R, O, S, A>
     where A: Serializable, O: Serializable,
           R: Serializable, S: Serializable,
           BN: Clone {
@@ -146,15 +144,15 @@ impl<NI, CN, BN, R, O, S, A, L> Clone for ReconfigurationStub<NI, CN, BN, R, O, 
         Self {
             network_management: self.network_management.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> NetworkStub<R> for ReconfigurationStub<NI, CN, BN, R, O, S, A, L>
-    where A: Serializable, O: Serializable,
-          R: Serializable, S: Serializable,
-          BN: Clone, NI: NetworkInformationProvider {
+impl<NI, CN, BN, R, O, S, A> NetworkStub<R> for ReconfigurationStub<NI, CN, BN, R, O, S, A>
+    where A: Serializable + 'static, O: Serializable + 'static,
+          R: Serializable + 'static, S: Serializable + 'static,
+          BN: Clone, NI: NetworkInformationProvider,
+          CN: ByteNetworkStub + 'static {
     type Outgoing = Self;
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
@@ -165,33 +163,31 @@ impl<NI, CN, BN, R, O, S, A, L> NetworkStub<R> for ReconfigurationStub<NI, CN, B
 /// Operation stub
 ///
 ///
-pub struct OperationStub<NI, CN, BN, R, O, S, A, L>
+pub struct OperationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
     stub_endpoint: StubEndpoint<O::Message>,
-    _p: PhantomData<fn() -> L>,
 }
 
-impl<NI, CN, BN, R, O, S, A, L> OperationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> OperationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
-        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Protocol);
+        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Protocol).clone();
 
         let end_point = end_point.into_protocol_endpoint();
 
         Self {
             network_management,
             stub_endpoint: end_point,
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> Clone for OperationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> Clone for OperationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
@@ -199,15 +195,15 @@ impl<NI, CN, BN, R, O, S, A, L> Clone for OperationStub<NI, CN, BN, R, O, S, A, 
         Self {
             network_management: self.network_management.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> NetworkStub<O> for OperationStub<NI, CN, BN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone, NI: NetworkInformationProvider {
+impl<NI, CN, BN, R, O, S, A> NetworkStub<O> for OperationStub<NI, CN, BN, R, O, S, A>
+    where R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, CN: ByteNetworkStub + 'static,
+          NI: NetworkInformationProvider {
     type Outgoing = Self;
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
@@ -216,34 +212,32 @@ impl<NI, CN, BN, R, O, S, A, L> NetworkStub<O> for OperationStub<NI, CN, BN, R, 
 }
 
 /// State protocol stub
-pub struct StateProtocolStub<NI, CN, BN, R, O, S, A, L>
+pub struct StateProtocolStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
     stub_endpoint: StubEndpoint<S::Message>,
-    _p: PhantomData<fn() -> L>,
 }
 
-impl<NI, CN, BN, R, O, S, A, L> StateProtocolStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> StateProtocolStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
-        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::StateProtocol);
+        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::StateProtocol).clone();
 
         let end_point = end_point.into_state_protocol_endpoint();
 
         Self {
             network_management,
             stub_endpoint: end_point,
-            _p: Default::default(),
         }
     }
 }
 
 //Clone impl
-impl<NI, CN, BN, R, O, S, A, L> Clone for StateProtocolStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> Clone for StateProtocolStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
@@ -251,15 +245,15 @@ impl<NI, CN, BN, R, O, S, A, L> Clone for StateProtocolStub<NI, CN, BN, R, O, S,
         Self {
             network_management: self.network_management.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> NetworkStub<S> for StateProtocolStub<NI, CN, BN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone, NI: NetworkInformationProvider {
+impl<NI, CN, BN, R, O, S, A> NetworkStub<S> for StateProtocolStub<NI, CN, BN, R, O, S, A>
+    where R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, NI: NetworkInformationProvider,
+          CN: ByteNetworkStub + 'static {
     type Outgoing = Self;
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
@@ -268,33 +262,31 @@ impl<NI, CN, BN, R, O, S, A, L> NetworkStub<S> for StateProtocolStub<NI, CN, BN,
 }
 
 /// Application stub
-pub struct ApplicationStub<NI, CN, BN, R, O, S, A, L>
+pub struct ApplicationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
     stub_endpoint: StubEndpoint<A::Message>,
-    _p: PhantomData<fn() -> L>,
 }
 
-impl<NI, CN, BN, R, O, S, A, L> ApplicationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A, > ApplicationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
     pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
-        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Application);
+        let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Application).clone();
 
         let end_point = end_point.into_application_endpoint();
 
         Self {
             network_management,
             stub_endpoint: end_point,
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> Clone for ApplicationStub<NI, CN, BN, R, O, S, A, L>
+impl<NI, CN, BN, R, O, S, A> Clone for ApplicationStub<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BN: Clone {
@@ -302,15 +294,15 @@ impl<NI, CN, BN, R, O, S, A, L> Clone for ApplicationStub<NI, CN, BN, R, O, S, A
         Self {
             network_management: self.network_management.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
-            _p: Default::default(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A, L> NetworkStub<A> for ApplicationStub<NI, CN, BN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone, NI: NetworkInformationProvider {
+impl<NI, CN, BN, R, O, S, A> NetworkStub<A> for ApplicationStub<NI, CN, BN, R, O, S, A>
+    where R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, NI: NetworkInformationProvider,
+          CN: ByteNetworkStub + 'static {
     type Outgoing = Self;
 
     fn outgoing_stub(&self) -> &Self::Outgoing {

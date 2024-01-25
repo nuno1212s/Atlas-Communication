@@ -22,8 +22,8 @@ pub type NetworkSerializedMessage = WireMessage;
 pub type StoredSerializedMessage<M> = StoredMessage<SerializedMessage<M>>;
 
 pub struct SerializedMessage<M> {
-    original: M,
-    raw: Buf,
+    pub(crate) original: M,
+    pub(crate) raw: Buf,
 }
 
 impl<M> SerializedMessage<M> {
@@ -50,8 +50,8 @@ impl<M> SerializedMessage<M> {
 /// the entire network message wrapper (with type of message, etc)
 #[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
 pub struct StoredMessage<M> {
-    header: Header,
-    message: M,
+    pub(crate) header: Header,
+    pub(crate) message: M,
 }
 
 impl<M> StoredMessage<M> {

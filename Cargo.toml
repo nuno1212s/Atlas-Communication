@@ -1,5 +1,5 @@
 [package]
-name = "atlas-communication-v2"
+name = "atlas-communication"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ edition = "2021"
 [features]
 
 serialize_serde = ["atlas-common/serialize_serde"]
-#serialize_capnp = ["atlas-capnp", "capnp"]
+serialize_capnp = []
 
 default = ["serialize_serde"]
 
