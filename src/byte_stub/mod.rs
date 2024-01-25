@@ -42,7 +42,7 @@ pub trait ByteNetworkController<NI, NSC, BS, IS>: Send + Sync + Clone {
     /// to query the network level connections
     type ConnectionController: ByteNetworkConnectionController;
 
-    fn initialize_controller(network_info: Arc<NI>, config: Self::Config, stub_controllers: NSC) -> Self
+    fn initialize_controller(network_info: Arc<NI>, config: Self::Config, stub_controllers: NSC) -> Result<Self>
         where Self: Sized,
               NI: NetworkInformationProvider,
               BS: ByteNetworkStub, IS: NodeIncomingStub,

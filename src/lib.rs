@@ -76,7 +76,7 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
 
         let connection_controller = PeerConnectionManager::initialize(our_id, our_type, lookup_table, rng.clone())?;
 
-        let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone());
+        let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
 
         Ok(Arc::new(Self {
             id: our_id,

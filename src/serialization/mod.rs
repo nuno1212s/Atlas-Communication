@@ -53,6 +53,7 @@ pub fn digest_message(message: &Buf) -> Result<Digest> {
 }
 
 pub trait InternalMessageVerifier<M> {
+
     /// Verify the internals of a given message type.
     /// This isn't meant to verify the integrity and authenticity of the entire message, as that has already been performed.
     /// This is used in cases where messages contain forwarded messages from other members, which must be verified as well

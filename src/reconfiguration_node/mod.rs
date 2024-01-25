@@ -9,6 +9,7 @@ use atlas_common::channel;
 use std::sync::{Arc};
 use std::time::Duration;
 use anyhow::anyhow;
+use getset::Getters;
 use atlas_common::maybe_vec::MaybeVec;
 
 /// Represents the network information that a node needs to know about other nodes
@@ -49,38 +50,33 @@ pub enum NetworkUpdateMessage {
     NodeConnectionPermitted(NodeId, NodeType, PublicKey)
 }
 
-pub struct ReconfigurationMessageHandler<T> {
-    reconfiguration_message_handling: (
-        ChannelSyncTx<T>,
-        ChannelSyncRx<T>,
-    ),
-    update_message_handling: (
-        ChannelSyncTx<NetworkUpdateMessage>,
-        ChannelSyncRx<NetworkUpdateMessage>,
-    ),
+#[derive(Getters)]
+pub struct ReconfigurationMessageHandler {
+    #[get = "pub"]
+    update_channel_tx: ChannelSyncTx<NetworkUpdateMessage>,
+    #[get = "pub"]
+    update_channel_rx: ChannelSyncRx<NetworkUpdateMessage>,
 }
 
-impl<T> ReconfigurationMessageHandler<T> {
+impl ReconfigurationMessageHandler {
     pub fn initialize() -> Self {
+        let (network_updates_tx, network_updates_rx) = channel::new_bounded_sync(100, Some("Reconfig update message"));
+
         ReconfigurationMessageHandler {
-            reconfiguration_message_handling: channel::new_bounded_sync(100, Some("Reconfig message handle")),
-            update_message_handling: channel::new_bounded_sync(100, Some("Reconfig update message")),
+            update_channel_tx: network_updates_tx,
+            update_channel_rx: network_updates_rx,
         }
     }
-
-    pub fn push_request(&self, message: T) -> Result<()> {
-        self.reconfiguration_message_handling.0.send(message)
-    }
 }
 
-impl<T> ReconfigurationMessageHandler<T> {
+impl ReconfigurationMessageHandler {
     pub fn receive_network_update(&self) -> Result<NetworkUpdateMessage> {
-        Ok(self.update_message_handling.1.recv().unwrap())
+        Ok(self.update_channel_rx.recv().unwrap())
     }
 
     pub fn try_receive_network_update(&self, timeout: Option<Duration>) -> Result<Option<NetworkUpdateMessage>> {
         if let Some(timeout) = timeout {
-            match self.update_message_handling.1.recv_timeout(timeout) {
+            match self.update_channel_rx.recv_timeout(timeout) {
                 Ok(msg) => {
                     Ok(Some(msg))
                 }
@@ -96,7 +92,7 @@ impl<T> ReconfigurationMessageHandler<T> {
                 }
             }
         } else {
-            match self.update_message_handling.1.try_recv() {
+            match self.update_channel_rx.try_recv() {
                 Ok(msg) => {
                     Ok(Some(msg))
                 }
@@ -116,8 +112,8 @@ impl<T> ReconfigurationMessageHandler<T> {
 }
 
 
-impl<T> ReconfigurationNetworkUpdate for ReconfigurationMessageHandler<T> {
+impl ReconfigurationNetworkUpdate for ReconfigurationMessageHandler {
     fn send_reconfiguration_update(&self, update: NetworkUpdateMessage) -> Result<()> {
-        self.update_message_handling.0.send(update)
+        self.update_channel_tx.send(update)
     }
 }
