@@ -1,12 +1,53 @@
+use thiserror::Error;
 use atlas_common::crypto::hash::{Context, Digest};
 use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
-use crate::message::WireMessage;
+use atlas_common::Err;
+use atlas_common::node_id::NodeId;
+use crate::message::{Buf, Header, verify_validity, WireMessage};
+use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::serialization;
+use crate::serialization::Serializable;
 
-pub trait MessageSignatureVerifier<T> {
+/// Verify the validity of a message, for any serializable type.
+/// Performs the serialization and follow up digest and signature verification of the byte message.
+///
+/// Guarantees AUTHENTICITY, INTEGRITY and NON-REPUDIATION of the message.
+pub fn verify_message_validity<M>(network_info: &impl NetworkInformationProvider, header: &Header, message: &M::Message) -> atlas_common::error::Result<()>
+    where M: Serializable {
+    let mut msg = Vec::new();
 
+    serialization::serialize_message::<Vec<u8>, M>(&mut msg, message)?;
 
+    let message_bytes = Buf::from(msg);
 
+    verify_ser_message_validity(network_info, header, &message_bytes)?;
+
+    Ok(())
 }
+
+/// Verifies the validity of a serialized network message
+///
+/// Guarantees AUTHENTICITY, INTEGRITY and NON-REPUDIATION of the message.
+pub(crate) fn verify_ser_message_validity(network_info: &impl NetworkInformationProvider, header: &Header, message: &Buf) -> atlas_common::error::Result<()> {
+    let digest = serialization::digest_message(message)?;
+
+    if *header.digest() != digest {
+        return Err!(IngestionError::DigestDoesNotMatch(digest, header.digest().clone()));
+    }
+
+    let pub_key = network_info.get_public_key(&header.from());
+
+    if let Some(key) = pub_key {
+        if !verify_validity(header, message, true, Some(&key)) {
+            Err!(IngestionError::InvalidSignature)
+        } else {
+            Ok(())
+        }
+    } else {
+        Err!(IngestionError::NodeNotKnown(header.from()))
+    }
+}
+
 
 fn digest_parts(from: u32, to: u32, nonce: u64, payload: &[u8]) -> Digest {
     let mut ctx = Context::new();
@@ -68,4 +109,15 @@ pub(crate) fn verify_parts(
 ) -> atlas_common::error::Result<()> {
     let digest = digest_parts(from, to, nonce, payload_digest);
     pk.verify(digest.as_ref(), sig)
+}
+
+/// The error type for ingestion of messages
+#[derive(Error, Debug)]
+pub enum IngestionError {
+    #[error("The digest of the message {0:?} does not match the digest in the header {1:?}")]
+    DigestDoesNotMatch(Digest, Digest),
+    #[error("We do not know the node {0:?} (No Public key available)")]
+    NodeNotKnown(NodeId),
+    #[error("The message we have received has an invalid signature")]
+    InvalidSignature,
 }

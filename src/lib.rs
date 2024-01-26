@@ -21,7 +21,7 @@ pub mod message;
 pub mod reconfiguration_node;
 pub mod lookup_table;
 pub mod serialization;
-mod message_signing;
+pub mod message_signing;
 mod message_ingestion;
 mod metrics;
 mod message_outgoing;

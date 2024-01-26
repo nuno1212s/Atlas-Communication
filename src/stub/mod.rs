@@ -88,6 +88,7 @@ pub trait BatchedModuleIncomingStub<M> {
 
 /// A basic network stub
 pub trait NetworkStub<T> where T: Serializable {
+
     /// The outgoing message handler.
     type Outgoing: ModuleOutgoingStub<T::Message>;
 

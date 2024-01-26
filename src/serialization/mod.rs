@@ -11,7 +11,9 @@ use atlas_common::crypto::hash::{Context, Digest};
 use atlas_common::serialization_helper::SerType;
 use atlas_common::error::*;
 use crate::message::{Buf, Header};
+use crate::reconfiguration_node::NetworkInformationProvider;
 
+/// Serialize a given message into a given writer
 pub fn serialize_message<W, T>(w: &mut W, message: &T::Message) -> Result<()>
     where T: Serializable,
           W: Write + AsRef<[u8]> + AsMut<[u8]> {
@@ -52,14 +54,15 @@ pub fn digest_message(message: &Buf) -> Result<Digest> {
     Ok(ctx.finish())
 }
 
+/// The trait that outlines the necessary behaviour for the internal message verification
 pub trait InternalMessageVerifier<M> {
 
     /// Verify the internals of a given message type.
     /// This isn't meant to verify the integrity and authenticity of the entire message, as that has already been performed.
     /// This is used in cases where messages contain forwarded messages from other members, which must be verified as well
     /// or other similar cases.
-    fn verify_message<NI>(info_provider: &Arc<NI>, header: &Header, message: &M) -> atlas_common::error::Result<()>;
-        //where NI: NetworkInformationProvider;
+    fn verify_message<NI>(info_provider: &Arc<NI>, header: &Header, message: &M) -> Result<()>
+        where NI: NetworkInformationProvider;
 }
 
 /// The trait that should be implemented for all systems which wish to use this communication method
