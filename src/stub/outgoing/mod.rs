@@ -12,7 +12,7 @@ use crate::byte_stub::connections::NetworkConnectionController;
 use crate::lookup_table::ModMessageWrapped;
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedMessage};
 use crate::message_outgoing::{send_message_to_targets, send_serialized_message_to_target};
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, ModuleOutgoingStub, OperationStub, ReconfigurationStub, StateProtocolStub};

@@ -12,7 +12,7 @@ use crate::message::{Header, StoredMessage, WireMessage};
 use crate::{lookup_table, message_ingestion};
 use crate::byte_stub::incoming::pooled_stub::{ConnectedPeersGroup, PooledStubOutput};
 use crate::config::ClientPoolConfig;
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 
 pub(crate) mod unpooled_stub;

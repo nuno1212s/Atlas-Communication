@@ -17,7 +17,7 @@ use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, Pee
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
 use crate::message::{StoredMessage, WireMessage};
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 

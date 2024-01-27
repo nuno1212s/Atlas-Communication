@@ -3,7 +3,7 @@ use atlas_common::error::*;
 use crate::lookup_table::{LookupTable, MessageModuleSerialization, PeerStubLookupTable};
 use crate::message::WireMessage;
 use crate::message_signing::verify_ser_message_validity;
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::{deserialize_message, Serializable};
 
 /// Process a message received from the byte layer of the network.

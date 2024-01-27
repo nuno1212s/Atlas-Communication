@@ -4,7 +4,7 @@ use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
 use atlas_common::Err;
 use atlas_common::node_id::NodeId;
 use crate::message::{Buf, Header, verify_validity, WireMessage};
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
 

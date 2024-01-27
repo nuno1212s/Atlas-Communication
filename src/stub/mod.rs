@@ -14,7 +14,7 @@ use crate::lookup_table::{EnumLookupTable, MessageModule};
 
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedMessage};
 use crate::NetworkManagement;
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 
 pub(crate) mod outgoing;

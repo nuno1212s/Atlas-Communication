@@ -50,7 +50,7 @@ pub enum NetworkUpdateMessage {
     NodeConnectionPermitted(NodeId, NodeType, PublicKey)
 }
 
-#[derive(Getters)]
+#[derive(Getters, Clone)]
 pub struct ReconfigurationMessageHandler {
     #[get = "pub"]
     update_channel_tx: ChannelSyncTx<NetworkUpdateMessage>,

@@ -11,14 +11,14 @@ use atlas_common::prng::ThreadSafePrng;
 use crate::byte_stub::{ByteNetworkController, ByteNetworkStub, PeerConnectionManager};
 use crate::byte_stub::incoming::PeerIncomingConnection;
 use crate::lookup_table::EnumLookupTable;
-use crate::reconfiguration_node::NetworkInformationProvider;
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, BatchedModuleIncomingStub, NetworkStub, OperationStub, ReconfigurationStub, RegularNetworkStub, StateProtocolStub};
 
 pub mod byte_stub;
 pub mod stub;
 pub mod message;
-pub mod reconfiguration_node;
+pub mod reconfiguration;
 pub mod lookup_table;
 pub mod serialization;
 pub mod message_signing;
