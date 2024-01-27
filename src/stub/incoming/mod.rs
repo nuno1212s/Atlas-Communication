@@ -1,12 +1,14 @@
 use crate::byte_stub::{ByteNetworkStub, StubEndpoint};
+use crate::byte_stub::connections::NetworkConnectionController;
 use crate::reconfiguration_node::NetworkInformationProvider;
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, BatchedNetworkStub, OperationStub, ReconfigurationStub, RegularNetworkStub, StateProtocolStub};
 
 /// The regular network stub implementation for the reconfiguration stub
-impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<R> for ReconfigurationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> RegularNetworkStub<R> for ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static, S: Serializable + 'static, A: Serializable + 'static,
-          NI: NetworkInformationProvider, BN: Clone, CN: ByteNetworkStub + 'static
+          NI: NetworkInformationProvider, CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController
 
 {
     type Incoming = StubEndpoint<R::Message>;
@@ -17,9 +19,10 @@ impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<R> for ReconfigurationStub<NI, C
 }
 
 /// The regular network stub implementation for the operation stub
-impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<O> for OperationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> RegularNetworkStub<O> for OperationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static, S: Serializable + 'static, A: Serializable + 'static,
-          NI: NetworkInformationProvider, BN: Clone, CN: ByteNetworkStub + 'static
+          NI: NetworkInformationProvider, CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController
 {
     type Incoming = StubEndpoint<O::Message>;
 
@@ -28,9 +31,10 @@ impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<O> for OperationStub<NI, CN, BN,
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<S> for StateProtocolStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> RegularNetworkStub<S> for StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static, S: Serializable + 'static, A: Serializable + 'static,
-          NI: NetworkInformationProvider, BN: Clone, CN: ByteNetworkStub + 'static
+          NI: NetworkInformationProvider, CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController
 {
     type Incoming = StubEndpoint<S::Message>;
 
@@ -44,9 +48,10 @@ impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<S> for StateProtocolStub<NI, CN,
 /// Application stubs can either be regular stubs (if we are a client)
 /// or pooled, batched stubs (if we are a replica)
 /// Therefore, we must have both implementations since they are both valid
-impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<A> for ApplicationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> RegularNetworkStub<A> for ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static, S: Serializable + 'static, A: Serializable + 'static,
-          NI: NetworkInformationProvider, BN: Clone, CN: ByteNetworkStub + 'static
+          NI: NetworkInformationProvider, CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController
 {
     type Incoming = StubEndpoint<A::Message>;
 
@@ -55,9 +60,10 @@ impl<NI, CN, BN, R, O, S, A> RegularNetworkStub<A> for ApplicationStub<NI, CN, B
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> BatchedNetworkStub<A> for ApplicationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> BatchedNetworkStub<A> for ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static, S: Serializable + 'static, A: Serializable + 'static,
-          NI: NetworkInformationProvider, BN: Clone, CN: ByteNetworkStub + 'static
+          NI: NetworkInformationProvider, CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController
 {
     type Incoming = StubEndpoint<A::Message>;
 

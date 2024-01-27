@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use std::time::Duration;
 
 use atlas_common::crypto::hash::Digest;
 use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
-use crate::byte_stub::{ByteNetworkStub, ModuleStubEndPoint, StubEndpoint};
-use crate::lookup_table::MessageModule;
+use atlas_common::prng::ThreadSafePrng;
+use crate::byte_stub::{ByteNetworkController, ByteNetworkStub, ModuleStubEndPoint, PeerConnectionManager, StubEndpoint};
+use crate::byte_stub::connections::NetworkConnectionController;
+use crate::byte_stub::incoming::PeerIncomingConnection;
+use crate::lookup_table::{EnumLookupTable, MessageModule};
 
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedMessage};
 use crate::NetworkManagement;
@@ -87,12 +91,18 @@ pub trait BatchedModuleIncomingStub<M> {
 }
 
 /// A basic network stub
-pub trait NetworkStub<T> where T: Serializable {
-
+pub trait NetworkStub<T>: Send + Sync where T: Serializable {
     /// The outgoing message handler.
     type Outgoing: ModuleOutgoingStub<T::Message>;
 
+    /// The controller of the connections
+    type Connections: NetworkConnectionController;
+
+    fn id(&self) -> NodeId;
+
     fn outgoing_stub(&self) -> &Self::Outgoing;
+
+    fn connections(&self) -> &Self::Connections;
 }
 
 /// An extended network stub, with the incoming request handling stubs as well
@@ -113,200 +123,279 @@ pub trait BatchedNetworkStub<T>: NetworkStub<T> where T: Serializable {
 /// In reality, this should all be macros, but I'm not into the macro scene
 /// And I can't take the time to learn it atm
 /// Reconfiguration stub
-pub struct ReconfigurationStub<NI, CN, BN, R, O, S, A>
+/// TODO: Remove dependency on the network management, as it introduces un necessary BN generics
+pub struct ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
+          BNC: NetworkConnectionController {
+    network_info: Arc<NI>,
+    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<R::Message>,
+    connections: Arc<BNC>,
 }
 
-impl<NI, CN, BN, R, O, S, A> ReconfigurationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
+          BNC: NetworkConnectionController {
+    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Reconfiguration).clone();
 
         let end_point = end_point.into_reconfig_endpoint();
 
         Self {
-            network_management,
+            network_info: network_management.network_info().clone(),
+            conn_manager: network_management.conn_manager().clone(),
+            rng: network_management.rng().clone(),
             stub_endpoint: end_point,
+            connections: conn_controller,
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> Clone for ReconfigurationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> Clone for ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where A: Serializable, O: Serializable,
           R: Serializable, S: Serializable,
-          BN: Clone {
+          BNC: NetworkConnectionController {
     fn clone(&self) -> Self {
         Self {
-            network_management: self.network_management.clone(),
+            network_info: self.network_info.clone(),
+            conn_manager: self.conn_manager.clone(),
+            rng: self.rng.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
+            connections: self.connections.clone(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> NetworkStub<R> for ReconfigurationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> NetworkStub<R> for ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where A: Serializable + 'static, O: Serializable + 'static,
           R: Serializable + 'static, S: Serializable + 'static,
-          BN: Clone, NI: NetworkInformationProvider,
-          CN: ByteNetworkStub + 'static {
+          NI: NetworkInformationProvider,
+          CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController {
     type Outgoing = Self;
+    type Connections = BNC;
+
+    fn id(&self) -> NodeId {
+        self.conn_manager.node_id()
+    }
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
         self
+    }
+
+    fn connections(&self) -> &Self::Connections {
+        todo!()
     }
 }
 
 /// Operation stub
 ///
 ///
-pub struct OperationStub<NI, CN, BN, R, O, S, A>
+pub struct OperationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
+          BNC: NetworkConnectionController {
+    network_info: Arc<NI>,
+    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<O::Message>,
+    connections: Arc<BNC>,
 }
 
-impl<NI, CN, BN, R, O, S, A> OperationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> OperationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
+          BNC: NetworkConnectionController {
+    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Protocol).clone();
 
         let end_point = end_point.into_protocol_endpoint();
 
         Self {
-            network_management,
+            network_info: network_management.network_info().clone(),
+            conn_manager: network_management.conn_manager().clone(),
+            rng: network_management.rng().clone(),
             stub_endpoint: end_point,
+            connections: conn_controller,
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> Clone for OperationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> Clone for OperationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
+          BNC: NetworkConnectionController {
     fn clone(&self) -> Self {
         Self {
-            network_management: self.network_management.clone(),
+            network_info: self.network_info.clone(),
+            conn_manager: self.conn_manager.clone(),
+            rng: self.rng.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
+            connections: self.connections.clone(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> NetworkStub<O> for OperationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> NetworkStub<O> for OperationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, CN: ByteNetworkStub + 'static,
-          NI: NetworkInformationProvider {
+          CN: ByteNetworkStub + 'static,
+          NI: NetworkInformationProvider,
+          BNC: NetworkConnectionController {
     type Outgoing = Self;
+    type Connections = BNC;
+
+    fn id(&self) -> NodeId {
+        self.conn_manager.node_id()
+    }
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
         self
     }
+
+    fn connections(&self) -> &Self::Connections {
+        todo!()
+    }
 }
 
 /// State protocol stub
-pub struct StateProtocolStub<NI, CN, BN, R, O, S, A>
+pub struct StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
+          BNC: NetworkConnectionController {
+    network_info: Arc<NI>,
+    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<S::Message>,
+    connections: Arc<BNC>,
 }
 
-impl<NI, CN, BN, R, O, S, A> StateProtocolStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
+          BNC: NetworkConnectionController {
+    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self
+        where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::StateProtocol).clone();
 
         let end_point = end_point.into_state_protocol_endpoint();
 
         Self {
-            network_management,
+            network_info: network_management.network_info().clone(),
+            conn_manager: network_management.conn_manager().clone(),
+            rng: network_management.rng().clone(),
             stub_endpoint: end_point,
+            connections: conn_controller,
         }
     }
 }
 
 //Clone impl
-impl<NI, CN, BN, R, O, S, A> Clone for StateProtocolStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> Clone for StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
+          BNC: NetworkConnectionController {
     fn clone(&self) -> Self {
         Self {
-            network_management: self.network_management.clone(),
+            network_info: self.network_info.clone(),
+            conn_manager: self.conn_manager.clone(),
+            rng: self.rng.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
+            connections: self.connections.clone(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> NetworkStub<S> for StateProtocolStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> NetworkStub<S> for StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, NI: NetworkInformationProvider,
-          CN: ByteNetworkStub + 'static {
+          NI: NetworkInformationProvider,
+          CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController {
     type Outgoing = Self;
+    type Connections = BNC;
+
+    fn id(&self) -> NodeId {
+        self.conn_manager.node_id()
+    }
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
         self
     }
+
+    fn connections(&self) -> &Self::Connections {
+        todo!()
+    }
 }
 
 /// Application stub
-pub struct ApplicationStub<NI, CN, BN, R, O, S, A>
+pub struct ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    network_management: NetworkManagement<NI, CN, BN, R, O, S, A>,
+          BNC: NetworkConnectionController {
+    network_info: Arc<NI>,
+    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<A::Message>,
+    connections: Arc<BNC>,
 }
 
-impl<NI, CN, BN, R, O, S, A, > ApplicationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A, > ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
-    pub fn new(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>) -> Self {
+          BNC: NetworkConnectionController {
+    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self
+        where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Application).clone();
 
         let end_point = end_point.into_application_endpoint();
 
         Self {
-            network_management,
+            network_info: network_management.network_info().clone(),
+            conn_manager: network_management.conn_manager().clone(),
+            rng: network_management.rng().clone(),
             stub_endpoint: end_point,
+            connections: conn_controller,
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> Clone for ApplicationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> Clone for ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
+          BNC: NetworkConnectionController {
     fn clone(&self) -> Self {
         Self {
-            network_management: self.network_management.clone(),
+            network_info: self.network_info.clone(),
+            conn_manager: self.conn_manager.clone(),
+            rng: self.rng.clone(),
             stub_endpoint: self.stub_endpoint.clone(),
+            connections: self.connections.clone(),
         }
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> NetworkStub<A> for ApplicationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> NetworkStub<A> for ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, NI: NetworkInformationProvider,
-          CN: ByteNetworkStub + 'static {
+          NI: NetworkInformationProvider,
+          CN: ByteNetworkStub + 'static,
+          BNC: NetworkConnectionController {
     type Outgoing = Self;
+    type Connections = BNC;
+
+    fn id(&self) -> NodeId {
+        self.conn_manager.node_id()
+    }
 
     fn outgoing_stub(&self) -> &Self::Outgoing {
         self
+    }
+
+    fn connections(&self) -> &Self::Connections {
+        todo!()
     }
 }

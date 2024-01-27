@@ -6,9 +6,10 @@ use bytes::Bytes;
 use atlas_common::crypto::hash::Digest;
 use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
-use crate::byte_stub::ByteNetworkStub;
 
-use crate::lookup_table::{LookupTable, ModMessageWrapped};
+use crate::byte_stub::ByteNetworkStub;
+use crate::byte_stub::connections::NetworkConnectionController;
+use crate::lookup_table::ModMessageWrapped;
 use crate::message::{SerializedMessage, StoredMessage, StoredSerializedMessage};
 use crate::message_outgoing::{send_message_to_targets, send_serialized_message_to_target};
 use crate::reconfiguration_node::NetworkInformationProvider;
@@ -16,20 +17,19 @@ use crate::serialization;
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, ModuleOutgoingStub, OperationStub, ReconfigurationStub, StateProtocolStub};
 
-impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where NI: NetworkInformationProvider,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, CN: ByteNetworkStub+ 'static {
+          CN: ByteNetworkStub + 'static, BNC: NetworkConnectionController {
     fn send(&self, message: R::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
-                                wrapped_message, iter::once(target));
+                                &self.rng,
+                                wrapped_message,
+                                iter::once(target));
 
         Ok(())
     }
@@ -37,11 +37,10 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationS
     fn send_signed(&self, message: R::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
-        let rng = self.network_management.rng();
 
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 iter::once(target));
 
@@ -51,11 +50,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationS
     fn broadcast(&self, message: R::Message, targets: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message,
                                 targets);
 
@@ -65,11 +62,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationS
     fn broadcast_signed(&self, message: R::Message, target: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 target);
 
@@ -94,26 +89,25 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<R::Message> for ReconfigurationS
 
             let serialized_message = SerializedMessage::new(wrapped_message, buf);
 
-            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI, CN, BNC, R, O, S, A>
     where NI: NetworkInformationProvider,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, CN: ByteNetworkStub + 'static, {
+          CN: ByteNetworkStub + 'static, BNC: NetworkConnectionController {
     fn send(&self, message: O::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
-        let rng = self.network_management.rng();
 
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message, iter::once(target));
 
         Ok(())
@@ -122,11 +116,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI
     fn send_signed(&self, message: O::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 iter::once(target));
 
@@ -136,11 +128,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI
     fn broadcast(&self, message: O::Message, targets: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message,
                                 targets);
 
@@ -150,11 +140,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI
     fn broadcast_signed(&self, message: O::Message, target: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 target);
 
@@ -179,28 +167,24 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<NI
 
             let serialized_message = SerializedMessage::new(wrapped_message, buf);
 
-            let rng = self.network_management.rng();
-
-            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where NI: NetworkInformationProvider,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, CN: ByteNetworkStub+ 'static {
+          CN: ByteNetworkStub + 'static, BNC: NetworkConnectionController {
     fn send(&self, message: S::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message, iter::once(target));
 
         Ok(())
@@ -209,11 +193,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStu
     fn send_signed(&self, message: S::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 iter::once(target));
 
@@ -223,11 +205,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStu
     fn broadcast(&self, message: S::Message, targets: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message,
                                 targets);
 
@@ -237,11 +217,10 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStu
     fn broadcast_signed(&self, message: S::Message, target: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
-        let rng = self.network_management.rng();
 
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 target);
 
@@ -266,28 +245,24 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<S::Message> for StateProtocolStu
 
             let serialized_message = SerializedMessage::new(wrapped_message, buf);
 
-            let rng = self.network_management.rng();
-
-            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())
     }
 }
 
-impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<NI, CN, BN, R, O, S, A>
+impl<NI, CN, BNC, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<NI, CN, BNC, R, O, S, A>
     where NI: NetworkInformationProvider,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, CN: ByteNetworkStub+ 'static {
+          CN: ByteNetworkStub + 'static, BNC: NetworkConnectionController {
     fn send(&self, message: A::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message, iter::once(target));
 
         Ok(())
@@ -296,11 +271,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<
     fn send_signed(&self, message: A::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 iter::once(target));
 
@@ -310,11 +283,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<
     fn broadcast(&self, message: A::Message, targets: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
+        send_message_to_targets(&self.conn_manager,
                                 None,
-                                &rng,
+                                &self.rng,
                                 wrapped_message,
                                 targets);
 
@@ -324,11 +295,9 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<
     fn broadcast_signed(&self, message: A::Message, target: impl Iterator<Item=NodeId>) -> std::result::Result<(), Vec<NodeId>> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
-        let rng = self.network_management.rng();
-
-        send_message_to_targets(&self.network_management.conn_manager,
-                                Some(self.network_management.network_info().get_key_pair()),
-                                &rng,
+        send_message_to_targets(&self.conn_manager,
+                                Some(self.network_info.get_key_pair()),
+                                &self.rng,
                                 wrapped_message,
                                 target);
 
@@ -353,9 +322,7 @@ impl<NI, CN, BN, R, O, S, A> ModuleOutgoingStub<A::Message> for ApplicationStub<
 
             let serialized_message = SerializedMessage::new(wrapped_message, buf);
 
-            let rng = self.network_management.rng();
-
-            send_serialized_message_to_target(&self.network_management.conn_manager, StoredMessage::new(header, serialized_message), target);
+            send_serialized_message_to_target(&self.conn_manager, StoredMessage::new(header, serialized_message), target);
         });
 
         Ok(())

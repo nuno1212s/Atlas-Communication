@@ -11,7 +11,7 @@ use atlas_common::collections::HashMap;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
-use crate::byte_stub::connections::ByteNetworkConnectionController;
+use crate::byte_stub::connections::NetworkConnectionController;
 
 use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, PeerStubLookupTable, pooled_stub, unpooled_stub};
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
@@ -34,13 +34,12 @@ pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 /// BS: The byte network stub, which is connection oriented
 /// IS: The incoming stub, which is connection oriented
 pub trait ByteNetworkController<NI, NSC, BS, IS>: Send + Sync + Clone {
-
     ///  The configuration type
     type Config: Send + 'static;
 
     /// The connection controller type, used to instruct the byte network layer
     /// to query the network level connections
-    type ConnectionController: ByteNetworkConnectionController;
+    type ConnectionController: NetworkConnectionController;
 
     fn initialize_controller(network_info: Arc<NI>, config: Self::Config, stub_controllers: NSC) -> Result<Self>
         where Self: Sized,
@@ -240,7 +239,8 @@ impl<CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           L: LookupTable<R, O, S, A>,
-          CN: Send + Clone {
+          CN: Send + Clone, {
+
     fn has_stub_for(&self, node: &NodeId) -> bool {
         self.connections.has_connection(node)
     }
@@ -295,7 +295,7 @@ impl<R, O, S, A> PeerStubEndpoints<R, O, S, A>
 
 impl<CN, R, O, S, A, L> Clone for PeerConnectionManager<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable, L: Clone {
+          S: Serializable, A: Serializable, L: Clone, {
     fn clone(&self) -> Self {
         Self {
             node_id: self.node_id.clone(),

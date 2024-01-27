@@ -13,6 +13,26 @@ use atlas_common::error::*;
 use crate::message::{Buf, Header};
 use crate::reconfiguration_node::NetworkInformationProvider;
 
+/// The trait that outlines the necessary behaviour for the internal message verification
+pub trait InternalMessageVerifier<M> {
+
+    /// Verify the internals of a given message type.
+    /// This isn't meant to verify the integrity and authenticity of the entire message, as that has already been performed.
+    /// This is used in cases where messages contain forwarded messages from other members, which must be verified as well
+    /// or other similar cases.
+    fn verify_message<NI>(info_provider: &Arc<NI>, header: &Header, message: &M) -> Result<()>
+        where NI: NetworkInformationProvider;
+}
+
+/// The trait that should be implemented for all systems which wish to use this communication method
+pub trait Serializable: Send {
+    /// The message type
+    type Message: SerType;
+
+    type Verifier: InternalMessageVerifier<Self::Message>;
+}
+
+
 /// Serialize a given message into a given writer
 pub fn serialize_message<W, T>(w: &mut W, message: &T::Message) -> Result<()>
     where T: Serializable,
@@ -54,21 +74,3 @@ pub fn digest_message(message: &Buf) -> Result<Digest> {
     Ok(ctx.finish())
 }
 
-/// The trait that outlines the necessary behaviour for the internal message verification
-pub trait InternalMessageVerifier<M> {
-
-    /// Verify the internals of a given message type.
-    /// This isn't meant to verify the integrity and authenticity of the entire message, as that has already been performed.
-    /// This is used in cases where messages contain forwarded messages from other members, which must be verified as well
-    /// or other similar cases.
-    fn verify_message<NI>(info_provider: &Arc<NI>, header: &Header, message: &M) -> Result<()>
-        where NI: NetworkInformationProvider;
-}
-
-/// The trait that should be implemented for all systems which wish to use this communication method
-pub trait Serializable: Send {
-    /// The message type
-    type Message: SerType;
-
-    type Verifier: InternalMessageVerifier<Self::Message>;
-}
