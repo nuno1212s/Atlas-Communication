@@ -17,23 +17,20 @@ use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, Pee
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
 use crate::message::{StoredMessage, WireMessage};
-use crate::reconfiguration::NetworkInformationProvider;
+use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
 use crate::serialization::Serializable;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 
-pub(crate) mod incoming;
+pub mod incoming;
 pub(crate) mod outgoing;
 pub mod connections;
 
 pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 
 /// The byte network controller.
-/// The generics are meant for:
-/// NI: NetworkInformationProvider
-/// NSC: The Node stub controller
-/// BS: The byte network stub, which is connection oriented
-/// IS: The incoming stub, which is connection oriented
-pub trait ByteNetworkController<NI, NSC, BS, IS>: Send + Sync + Clone {
+///
+/// Meant to store type info and provide access to multiple things at the byte networking level
+pub trait ByteNetworkController: Send + Sync + Clone {
     ///  The configuration type
     type Config: Send + 'static;
 
@@ -41,14 +38,26 @@ pub trait ByteNetworkController<NI, NSC, BS, IS>: Send + Sync + Clone {
     /// to query the network level connections
     type ConnectionController: NetworkConnectionController;
 
-    fn initialize_controller(network_info: Arc<NI>, config: Self::Config, stub_controllers: NSC) -> Result<Self>
-        where Self: Sized,
-              NI: NetworkInformationProvider,
-              BS: ByteNetworkStub, IS: NodeIncomingStub,
-              NSC: NodeStubController<BS, IS>;
-
     /// Get the reference to this controller's connection controller
     fn connection_controller(&self) -> &Arc<Self::ConnectionController>;
+}
+
+/// The
+/// The generics are meant for:
+/// NI: NetworkInformationProvider
+/// NSC: The Node stub controller
+/// BS: The byte network stub, which is connection oriented
+/// IS: The incoming stub, which is connection oriented
+pub trait ByteNetworkControllerInit<NI, NSC, BS, IS>: ByteNetworkController {
+    fn initialize_controller(reconf: ReconfigurationMessageHandler,
+                             network_info: Arc<NI>,
+                             config: Self::Config,
+                             stub_controllers: NSC) -> Result<Self>
+        where Self: Sized,
+              NI: NetworkInformationProvider,
+              BS: ByteNetworkStub,
+              IS: NodeIncomingStub,
+              NSC: NodeStubController<BS, IS>;
 }
 
 /// The network stub for byte messages (after they have gone through the serialization process)
@@ -65,6 +74,10 @@ pub trait ByteNetworkStub: Send + Sync + Clone {
 /// in [NodeIncomingStub]. It's basically revolving around maintaining context, reducing lookups on
 /// connection maps and non static look up tables (which would have to be protected with locks since they
 /// would have to be modified on the fly).
+///
+/// This is a trait (and not directly the [PeerConnectionManager] which implements this trait and its behaviours)
+/// because we want to obscure the generic information found at this module's level (R, O, S, A) from the byte network
+/// level, such that the byte network only has to deal with bytes and a small amount of generics.
 pub trait NodeStubController<BS, IS>: Send + Sync + Clone {
     // Check if a given node has a stub registered.
     fn has_stub_for(&self, node: &NodeId) -> bool;
@@ -240,7 +253,6 @@ impl<CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A
           S: Serializable, A: Serializable,
           L: LookupTable<R, O, S, A>,
           CN: Send + Clone, {
-
     fn has_stub_for(&self, node: &NodeId) -> bool {
         self.connections.has_connection(node)
     }

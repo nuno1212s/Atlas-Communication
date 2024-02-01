@@ -11,7 +11,7 @@ use atlas_metrics::benchmarks::ClientPerf;
 use atlas_metrics::metrics::metric_duration;
 use crate::config::ClientPoolConfig;
 use crate::message::{Header, StoredMessage};
-use crate::metrics::CLIENT_POOL_COLLECT_TIME_ID;
+use crate::metric::CLIENT_POOL_COLLECT_TIME_ID;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 
 pub struct PooledStubOutput<M>(ChannelSyncRx<ClientRqBatchOutput<M>>);

@@ -139,7 +139,7 @@ impl<NI, CN, BNC, R, O, S, A> ReconfigurationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
-    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self where BN: Clone {
+    pub fn new<BN>(network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Reconfiguration).clone();
 
         let end_point = end_point.into_reconfig_endpoint();
@@ -209,7 +209,7 @@ impl<NI, CN, BNC, R, O, S, A> OperationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
-    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self where BN: Clone {
+    pub fn new<BN>(network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Protocol).clone();
 
         let end_point = end_point.into_protocol_endpoint();
@@ -277,7 +277,7 @@ impl<NI, CN, BNC, R, O, S, A> StateProtocolStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
-    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self
+    pub fn new<BN>(network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self
         where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::StateProtocol).clone();
 
@@ -347,7 +347,7 @@ impl<NI, CN, BNC, R, O, S, A, > ApplicationStub<NI, CN, BNC, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
-    pub fn new<BN>(network_management: NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self
+    pub fn new<BN>(network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>, conn_controller: Arc<BNC>) -> Self
         where BN: Clone {
         let end_point = network_management.conn_manager().endpoints().get_endpoint_for_module(&MessageModule::Application).clone();
 
