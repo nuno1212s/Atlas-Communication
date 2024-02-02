@@ -187,7 +187,7 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<R> for ReconfigurationStub<NI, CN, BNC
     }
 
     fn connections(&self) -> &Self::Connections {
-        todo!()
+        &self.connections
     }
 }
 
@@ -257,7 +257,7 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<O> for OperationStub<NI, CN, BNC, R, O
     }
 
     fn connections(&self) -> &Self::Connections {
-        todo!()
+        &self.connections
     }
 }
 
@@ -327,7 +327,7 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<S> for StateProtocolStub<NI, CN, BNC, 
     }
 
     fn connections(&self) -> &Self::Connections {
-        todo!()
+        &self.connections
     }
 }
 
@@ -396,6 +396,6 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<A> for ApplicationStub<NI, CN, BNC, R,
     }
 
     fn connections(&self) -> &Self::Connections {
-        todo!()
+        &self.connections
     }
 }

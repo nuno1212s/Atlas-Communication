@@ -12,13 +12,14 @@ use crate::byte_stub::incoming::InternalStubTX;
 use crate::message::Header;
 use crate::serialization::Serializable;
 
-#[derive(Clone, Debug, EnumIter, Enum, Serialize, Deserialize)]
+#[derive(Clone, Debug, EnumIter, Enum, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MessageModule {
     Reconfiguration,
     Protocol,
     StateProtocol,
     Application,
 }
+
 
 #[derive(Clone)]
 pub enum ModMessageWrapped<R, O, S, A> where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
