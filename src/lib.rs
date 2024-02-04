@@ -65,7 +65,7 @@ pub type NodeStubController<CN, R, O, S, A> = PeerConnectionManager<CN, R, O, S,
 impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone
+          BN: Clone, CN: Clone
 {
     type NetworkController = PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
@@ -122,7 +122,7 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
 impl<NI, CN, BN, R, O, S, A> Clone for NetworkManagement<NI, CN, BN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
-          BN: Clone {
+          BN: Clone, CN: Clone {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),

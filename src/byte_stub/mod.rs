@@ -14,6 +14,7 @@ use atlas_common::prng::ThreadSafePrng;
 use crate::byte_stub::connections::NetworkConnectionController;
 
 use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, PeerStubLookupTable, pooled_stub, unpooled_stub};
+use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
 use crate::message::{StoredMessage, WireMessage};
@@ -143,9 +144,13 @@ pub enum StubEndpoint<M> where M: Send {
 }
 
 /// The active stubs, connecting to a given peer
+#[derive(Getters)]
 pub struct ActiveConnections<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
+    id: NodeId,
+    #[get = "pub"]
+    loopback: PeerConnection<CN, R, O, S, A, L>,
     connection_map: Mutex<HashMap<NodeId, PeerConnection<CN, R, O, S, A, L>>>,
 }
 
@@ -189,11 +194,14 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
     where L: Send + Clone,
           CN: Clone,
           R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
-    pub fn initialize(id: NodeId, node_type: NodeType, lookup_table: L, rng: Arc<ThreadSafePrng>) -> Result<Self> {
+          S: Serializable, A: Serializable, {
+    pub fn initialize(id: NodeId, node_type: NodeType, lookup_table: L, rng: Arc<ThreadSafePrng>) -> Result<Self>
+        where L: LookupTable<R, O, S, A> {
         let (stub_controller, endpoints) = PeerStubController::initialize_controller(id, node_type)?;
 
-        let active_conns = ActiveConnections::default();
+        let loopback = Self::initialize_loopback(&stub_controller, lookup_table.clone(), id)?;
+
+        let active_conns = ActiveConnections::init(id, loopback);
 
         Ok(Self {
             node_id: id,
@@ -205,25 +213,40 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
         })
     }
 
+    fn initialize_loopback(controller: &PeerStubController<R, O, S, A>, l_table: L, node: NodeId) -> Result<PeerConnection<CN, R, O, S, A, L>>
+        where L: LookupTable<R, O, S, A> {
+        let table = Self::initialize_stub_lookup_table(controller, node)?;
+
+        let loopback = PeerOutgoingConnection::LoopbackStub(LoopbackOutgoingStub::init(table.clone()));
+
+        Ok(PeerConnection {
+            incoming_connection: PeerIncomingConnection::initialize_incoming_conn(l_table, table),
+            outgoing_connection: loopback,
+        })
+    }
+
+    fn initialize_stub_lookup_table(controller: &PeerStubController<R, O, S, A>, node_id: NodeId) -> Result<PeerStubLookupTable<R, O, S, A>> {
+        // Initialize all of the stubs required to create a new connection
+        let mut enum_array = Vec::with_capacity(enum_map::enum_len::<MessageModule>());
+
+        // Initialize all of the stubs required to create a new connection
+        // TODO: In the future, maybe add an ability to specify which stubs we want to initialize or not
+        for module in MessageModule::iter() {
+            let controller = controller.get_stub_controller_for(&module);
+
+            enum_array.push(controller.initialize_stud_for(node_id));
+        }
+
+        Ok(EnumMap::from_array(from_arr::<_, MODULES>(enum_array)?).into())
+    }
+
     /// Initialize an incoming connection for a given node
     /// This will initialize all the stubs required to handle messages from that node
     pub fn initialize_incoming_connection_for(&self, node_id: NodeId) -> Result<PeerIncomingConnection<R, O, S, A, L>>
         where L: LookupTable<R, O, S, A> {
         let lookup_table = self.lookup_table.clone();
 
-        let mut enum_array = Vec::with_capacity(enum_map::enum_len::<MessageModule>());
-
-        // Initialize all of the stubs required to create a new connection
-        // TODO: In the future, maybe add an ability to specify which stubs we want to initialize or not
-        for module in MessageModule::iter() {
-            let controller = self.controller.get_stub_controller_for(&module);
-
-            enum_array.push(controller.initialize_stud_for(node_id));
-        }
-
-        let table = EnumMap::from_array(from_arr::<_, MODULES>(enum_array)?).into();
-
-        Ok(PeerIncomingConnection::initialize_incoming_conn(lookup_table, table))
+        Ok(PeerIncomingConnection::initialize_incoming_conn(lookup_table, Self::initialize_stub_lookup_table(&self.controller, node_id)?))
     }
 
     /// Initialize an outgoing connection for a given node, given a byte level stub to that
@@ -252,9 +275,9 @@ impl<CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           L: LookupTable<R, O, S, A>,
-          CN: Send + Clone, {
+          CN: Send + Clone + Sync, {
     fn has_stub_for(&self, node: &NodeId) -> bool {
-        self.connections.has_connection(node)
+        self.connections.has_connection(node) || *node == self.node_id
     }
 
     fn generate_stub_for(&self, node: NodeId, node_type: NodeType, byte_stub: CN) -> Result<PeerIncomingConnection<R, O, S, A, L>>
@@ -286,6 +309,10 @@ impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
     }
 
     pub fn get_connection(&self, node: &NodeId) -> Option<PeerConnection<CN, R, O, S, A, L>> {
+        if *node == self.id {
+            return Some(self.loopback.clone());
+        }
+
         self.connection_map.lock().unwrap().get(node).cloned()
     }
 
@@ -307,7 +334,8 @@ impl<R, O, S, A> PeerStubEndpoints<R, O, S, A>
 
 impl<CN, R, O, S, A, L> Clone for PeerConnectionManager<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable, L: Clone, {
+          S: Serializable, A: Serializable,
+          L: Clone, CN: Clone {
     fn clone(&self) -> Self {
         Self {
             node_id: self.node_id.clone(),
@@ -325,11 +353,13 @@ pub(crate) fn from_arr<T, const N: usize>(v: Vec<T>) -> Result<[T; N]> {
         .map_err(|v: Vec<T>| anyhow!("Expected a Vec of length {} but it was {}", N, v.len()))
 }
 
-impl<CN, R, O, S, A, L> Default for ActiveConnections<CN, R, O, S, A, L>
+impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
-    fn default() -> Self {
+    fn init(id: NodeId, loopback: PeerConnection<CN, R, O, S, A, L>) -> Self {
         Self {
+            id,
+            loopback,
             connection_map: Mutex::new(Default::default()),
         }
     }

@@ -33,7 +33,6 @@ impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
                 self.handle_application_message(StoredMessage::new(header, a));
             }
         }
-        
     }
     
     fn handle_reconf_message(&self, message: StoredMessage<R::Message>) {

@@ -10,7 +10,7 @@ use crate::byte_stub::incoming::PeerStubLookupTable;
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::serialization::Serializable;
 
-mod loopback;
+pub(super) mod loopback;
 
 /// The outgoing stub for a peer.
 ///

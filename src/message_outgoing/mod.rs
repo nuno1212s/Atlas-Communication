@@ -4,7 +4,7 @@ use bytes::Bytes;
 use either::Either;
 use smallvec::SmallVec;
 
-use log::error;
+use log::{error, trace};
 use atlas_common::error::*;
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::KeyPair;
@@ -91,6 +91,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
 
             match option {
                 None => {
+                    error!("Failed to find connection to node {:?}", target);
                     failed_lookup.push(target);
                 }
                 Some(stub) => {
@@ -133,6 +134,9 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
 
         match (self.peer, msg) {
             (PeerOutgoingConnection::LoopbackStub(stub), Either::Left((msg, buf, digest))) => {
+
+                trace!("Sending message to self");
+
                 let wire_msg = WireMessage::new(self.from, self.to, msg.get_module(), buf, self.nonce, Some(digest), key_pair);
 
                 let (header, _, _) = wire_msg.into_inner();
