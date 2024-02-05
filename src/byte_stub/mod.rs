@@ -80,6 +80,7 @@ pub trait ByteNetworkStub: Send + Sync + Clone {
 /// because we want to obscure the generic information found at this module's level (R, O, S, A) from the byte network
 /// level, such that the byte network only has to deal with bytes and a small amount of generics.
 pub trait NodeStubController<BS, IS>: Send + Sync + Clone {
+    
     // Check if a given node has a stub registered.
     fn has_stub_for(&self, node: &NodeId) -> bool;
 
