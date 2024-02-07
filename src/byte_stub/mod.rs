@@ -25,6 +25,7 @@ use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 pub mod incoming;
 pub(crate) mod outgoing;
 pub mod connections;
+mod pending;
 
 pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 

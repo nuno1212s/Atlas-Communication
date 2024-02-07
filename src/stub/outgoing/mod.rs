@@ -104,7 +104,6 @@ impl<NI, CN, BNC, R, O, S, A> ModuleOutgoingStub<O::Message> for OperationStub<N
     fn send(&self, message: O::Message, target: NodeId, flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
-
         send_message_to_targets(&self.conn_manager,
                                 None,
                                 &self.rng,
