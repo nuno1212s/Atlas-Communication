@@ -31,15 +31,16 @@ pub struct SendTo<CN, R, O, S, A>
     shared: Option<Arc<KeyPair>>,
     nonce: u64,
     peer: PeerOutgoingConnection<CN, R, O, S, A>,
+    authenticated_state: bool
 }
 
 impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable, CN: Clone {
-    pub fn initialize_send_tos_serialized<L>(conn_manager: &PeerConnectionManager<CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
+    pub fn initialize_send_tos_serialized<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
                                              rng: &Arc<ThreadSafePrng>, target: NodeId)
                                              -> (Option<Self>, Option<Self>)
-        where L: Clone + Send {
+        where L: Clone + Send, {
         let mut send_to_me = None;
         let mut send_tos = None;
 
@@ -62,6 +63,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
                     shared: shared.cloned(),
                     nonce,
                     peer: connection,
+                    authenticated_state: stub.is_authenticated(),
                 };
 
                 if target == conn_manager.node_id() {
@@ -75,7 +77,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
         (send_to_me, send_tos)
     }
 
-    pub fn initialize_send_tos<L>(conn_manager: &PeerConnectionManager<CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
+    pub fn initialize_send_tos<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
                                   rng: &Arc<ThreadSafePrng>, targets: impl Iterator<Item=NodeId>)
                                   -> (Option<Self>, Option<SendTos<CN, R, O, S, A>>)
         where L: LookupTable<R, O, S, A> {
@@ -102,6 +104,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
                         shared: shared.cloned(),
                         nonce,
                         peer: connection,
+                        authenticated_state: stub.is_authenticated(),
                     };
 
                     if target == conn_manager.node_id() {

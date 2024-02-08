@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 use std::thread::Thread;
 use std::time::Duration;
 
@@ -8,12 +9,14 @@ use getset::{CopyGetters, Getters};
 use strum::IntoEnumIterator;
 
 use atlas_common::collections::HashMap;
+use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
 use crate::byte_stub::connections::NetworkConnectionController;
 
 use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, PeerStubLookupTable, pooled_stub, unpooled_stub};
+use crate::byte_stub::network_information::PendingConnectionManagement;
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
@@ -25,7 +28,7 @@ use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 pub mod incoming;
 pub(crate) mod outgoing;
 pub mod connections;
-mod pending;
+mod network_information;
 
 pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 
@@ -81,7 +84,6 @@ pub trait ByteNetworkStub: Send + Sync + Clone {
 /// because we want to obscure the generic information found at this module's level (R, O, S, A) from the byte network
 /// level, such that the byte network only has to deal with bytes and a small amount of generics.
 pub trait NodeStubController<BS, IS>: Send + Sync + Clone {
-    
     // Check if a given node has a stub registered.
     fn has_stub_for(&self, node: &NodeId) -> bool;
 
@@ -166,6 +168,9 @@ pub struct PeerConnection<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
     #[get = "pub"]
+    authenticated: Arc<AtomicBool>,
+
+    #[get = "pub"]
     incoming_connection: PeerIncomingConnection<R, O, S, A, L>,
     #[get = "pub"]
     outgoing_connection: PeerOutgoingConnection<CN, R, O, S, A>,
@@ -175,7 +180,7 @@ pub struct PeerConnection<CN, R, O, S, A, L>
 ///
 /// Handles all connections , outgoing and incoming
 #[derive(Getters, CopyGetters)]
-pub struct PeerConnectionManager<CN, R, O, S, A, L>
+pub struct PeerConnectionManager<NI, CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
     // The id of the node this connection manager is responsible for
@@ -186,18 +191,21 @@ pub struct PeerConnectionManager<CN, R, O, S, A, L>
     lookup_table: L,
     #[get = "pub"]
     rng: Arc<ThreadSafePrng>,
+    network_info: Arc<NI>,
     controller: Arc<PeerStubController<R, O, S, A>>,
     #[get = "pub"]
     endpoints: Arc<PeerStubEndpoints<R, O, S, A>>,
+    #[get = ""]
     connections: Arc<ActiveConnections<CN, R, O, S, A, L>>,
 }
 
-impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
+impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
     where L: Send + Clone,
           CN: Clone,
           R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable, {
-    pub fn initialize(id: NodeId, node_type: NodeType, lookup_table: L, rng: Arc<ThreadSafePrng>) -> Result<Self>
+          S: Serializable, A: Serializable,
+          NI: NetworkInformationProvider {
+    pub fn initialize(network_info: Arc<NI>, id: NodeId, node_type: NodeType, lookup_table: L, rng: Arc<ThreadSafePrng>) -> Result<Self>
         where L: LookupTable<R, O, S, A> {
         let (stub_controller, endpoints) = PeerStubController::initialize_controller(id, node_type)?;
 
@@ -209,6 +217,7 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
             node_id: id,
             lookup_table,
             rng,
+            network_info: network_info,
             controller: Arc::new(stub_controller),
             endpoints: Arc::new(endpoints),
             connections: Arc::new(active_conns),
@@ -222,6 +231,7 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
         let loopback = PeerOutgoingConnection::LoopbackStub(LoopbackOutgoingStub::init(table.clone()));
 
         Ok(PeerConnection {
+            authenticated: AtomicBool::new(true),
             incoming_connection: PeerIncomingConnection::initialize_incoming_conn(l_table, table),
             outgoing_connection: loopback,
         })
@@ -261,8 +271,12 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
 
     /// Initialize a connection to a given peer
     pub fn initialize_connection(&self, node: NodeId, node_stub: CN)
-                                 -> Result<PeerConnection<CN, R, O, S, A, L>> where L: LookupTable<R, O, S, A> {
+                                 -> Result<PeerConnection<CN, R, O, S, A, L>>
+        where L: LookupTable<R, O, S, A> {
+        let is_known = self.network_info.get_node_type(&node).is_some();
+
         Ok(PeerConnection {
+            authenticated: Arc::new(AtomicBool::new(is_known)),
             incoming_connection: self.initialize_incoming_connection_for(node)?,
             outgoing_connection: self.initialize_outgoing_connection_for(node, node_stub)?,
         })
@@ -273,10 +287,30 @@ impl<CN, R, O, S, A, L> PeerConnectionManager<CN, R, O, S, A, L>
     }
 }
 
-impl<CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A, L>> for PeerConnectionManager<CN, R, O, S, A, L>
+impl<NI, CN, R, O, S, A, L> PendingConnectionManagement for PeerConnectionManager<NI, CN, R, O, S, A, L>
+    where R: Serializable, O: Serializable, S: Serializable, A: Serializable, L: LookupTable<R, O, S, A>,
+          NI: NetworkInformationProvider,
+          CN: Send + Clone + Sync, {
+    type Conn = PeerConnection<CN, R, O, S, A, L>;
+
+    fn has_pending_connection(&self, node: &NodeId) -> bool {
+        self.connections.has_connection(node)
+    }
+
+    fn get_connection_to_node(&self, node: &NodeId) -> Option<Self::Conn> {
+        self.connections().get_connection(node)
+    }
+
+    fn upgrade_connection(&self, node: &NodeId, node_type: NodeType, key: PublicKey) -> Result<()> {
+        self.connections().get_connection(node).map(|c| c.authenticated.store(true, std::sync::atomic::Ordering::Relaxed));
+    }
+}
+
+impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A, L>> for PeerConnectionManager<NI, CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           L: LookupTable<R, O, S, A>,
+          NI: NetworkInformationProvider,
           CN: Send + Clone + Sync, {
     fn has_stub_for(&self, node: &NodeId) -> bool {
         self.connections.has_connection(node) || *node == self.node_id
@@ -334,7 +368,7 @@ impl<R, O, S, A> PeerStubEndpoints<R, O, S, A>
     }
 }
 
-impl<CN, R, O, S, A, L> Clone for PeerConnectionManager<CN, R, O, S, A, L>
+impl<NI, CN, R, O, S, A, L> Clone for PeerConnectionManager<NI, CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable,
           L: Clone, CN: Clone {
@@ -343,6 +377,7 @@ impl<CN, R, O, S, A, L> Clone for PeerConnectionManager<CN, R, O, S, A, L>
             node_id: self.node_id.clone(),
             lookup_table: self.lookup_table.clone(),
             rng: self.rng.clone(),
+            network_info: self.network_info.clone(),
             controller: self.controller.clone(),
             endpoints: self.endpoints.clone(),
             connections: self.connections.clone(),
@@ -482,12 +517,21 @@ impl<M> BatchedModuleIncomingStub<M> for StubEndpoint<M> where M: Send {
     }
 }
 
+impl<CN, R, O, S, A, L> PeerConnection<CN, R, O, S, A, L>  {
+
+    pub fn is_authenticated(&self) -> bool {
+        self.authenticated.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+}
+
 impl<CN, R, O, S, A, L> Clone for PeerConnection<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable, S: Serializable, A: Serializable,
           L: Clone, CN: Clone
 {
     fn clone(&self) -> Self {
         Self {
+            authenticated: self.authenticated.clone(),
             incoming_connection: self.incoming_connection.clone(),
             outgoing_connection: self.outgoing_connection.clone(),
         }
