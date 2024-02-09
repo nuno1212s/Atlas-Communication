@@ -54,8 +54,7 @@ pub trait ByteNetworkController: Send + Sync + Clone {
 /// BS: The byte network stub, which is connection oriented
 /// IS: The incoming stub, which is connection oriented
 pub trait ByteNetworkControllerInit<NI, NSC, BS, IS>: ByteNetworkController {
-    fn initialize_controller(reconf: ReconfigurationMessageHandler,
-                             network_info: Arc<NI>,
+    fn initialize_controller(network_info: Arc<NI>,
                              config: Self::Config,
                              stub_controllers: NSC) -> Result<Self>
         where Self: Sized,
@@ -92,7 +91,7 @@ pub trait NodeStubController<BS, IS>: Send + Sync + Clone {
     ///
     /// Returns an implementation of [NodeIncomingStub] that we can use to handle messages we have received from that node.
     /// By handle we mean deserialize, verify and pass on to the correct stub
-    fn generate_stub_for(&self, node: NodeId, node_type: NodeType, byte_stub: BS) -> Result<IS>
+    fn generate_stub_for(&self, node: NodeId, byte_stub: BS) -> Result<IS>
         where BS: ByteNetworkStub, IS: NodeIncomingStub;
 
     // Get the stub that is responsible for handling messages from a given node.
@@ -169,7 +168,6 @@ pub struct PeerConnection<CN, R, O, S, A, L>
           S: Serializable, A: Serializable {
     #[get = "pub"]
     authenticated: Arc<AtomicBool>,
-
     #[get = "pub"]
     incoming_connection: PeerIncomingConnection<R, O, S, A, L>,
     #[get = "pub"]
@@ -231,7 +229,7 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
         let loopback = PeerOutgoingConnection::LoopbackStub(LoopbackOutgoingStub::init(table.clone()));
 
         Ok(PeerConnection {
-            authenticated: AtomicBool::new(true),
+            authenticated: Arc::new(AtomicBool::new(true)),
             incoming_connection: PeerIncomingConnection::initialize_incoming_conn(l_table, table),
             outgoing_connection: loopback,
         })
@@ -291,18 +289,14 @@ impl<NI, CN, R, O, S, A, L> PendingConnectionManagement for PeerConnectionManage
     where R: Serializable, O: Serializable, S: Serializable, A: Serializable, L: LookupTable<R, O, S, A>,
           NI: NetworkInformationProvider,
           CN: Send + Clone + Sync, {
-    type Conn = PeerConnection<CN, R, O, S, A, L>;
-
     fn has_pending_connection(&self, node: &NodeId) -> bool {
         self.connections.has_connection(node)
     }
 
-    fn get_connection_to_node(&self, node: &NodeId) -> Option<Self::Conn> {
-        self.connections().get_connection(node)
-    }
-
-    fn upgrade_connection(&self, node: &NodeId, node_type: NodeType, key: PublicKey) -> Result<()> {
+    fn upgrade_connection_to_known(&self, node: &NodeId, node_type: NodeType, key: PublicKey) -> Result<()> {
         self.connections().get_connection(node).map(|c| c.authenticated.store(true, std::sync::atomic::Ordering::Relaxed));
+
+        Ok(())
     }
 }
 
@@ -316,7 +310,7 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
         self.connections.has_connection(node) || *node == self.node_id
     }
 
-    fn generate_stub_for(&self, node: NodeId, node_type: NodeType, byte_stub: CN) -> Result<PeerIncomingConnection<R, O, S, A, L>>
+    fn generate_stub_for(&self, node: NodeId, byte_stub: CN) -> Result<PeerIncomingConnection<R, O, S, A, L>>
         where CN: ByteNetworkStub {
         let connection = self.initialize_connection(node, byte_stub)?;
 
@@ -517,12 +511,11 @@ impl<M> BatchedModuleIncomingStub<M> for StubEndpoint<M> where M: Send {
     }
 }
 
-impl<CN, R, O, S, A, L> PeerConnection<CN, R, O, S, A, L>  {
-
+impl<CN, R, O, S, A, L> PeerConnection<CN, R, O, S, A, L>
+    where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
     pub fn is_authenticated(&self) -> bool {
         self.authenticated.load(std::sync::atomic::Ordering::Relaxed)
     }
-
 }
 
 impl<CN, R, O, S, A, L> Clone for PeerConnection<CN, R, O, S, A, L>

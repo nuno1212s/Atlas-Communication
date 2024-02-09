@@ -129,7 +129,7 @@ pub struct ReconfigurationStub<NI, CN, BNC, R, O, S, A>
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
     network_info: Arc<NI>,
-    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
     rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<R::Message>,
     connections: Arc<BNC>,
@@ -199,7 +199,7 @@ pub struct OperationStub<NI, CN, BNC, R, O, S, A>
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
     network_info: Arc<NI>,
-    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
     rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<O::Message>,
     connections: Arc<BNC>,
@@ -267,7 +267,7 @@ pub struct StateProtocolStub<NI, CN, BNC, R, O, S, A>
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
     network_info: Arc<NI>,
-    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
     rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<S::Message>,
     connections: Arc<BNC>,
@@ -337,7 +337,7 @@ pub struct ApplicationStub<NI, CN, BNC, R, O, S, A>
           S: Serializable, A: Serializable,
           BNC: NetworkConnectionController {
     network_info: Arc<NI>,
-    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
     rng: Arc<ThreadSafePrng>,
     stub_endpoint: StubEndpoint<A::Message>,
     connections: Arc<BNC>,

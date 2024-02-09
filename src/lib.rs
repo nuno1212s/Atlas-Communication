@@ -53,26 +53,26 @@ pub struct NetworkManagement<NI, CN, BN, R, O, S, A>
     rng: Arc<ThreadSafePrng>,
     // The controller for all the connections that are incoming into our node
     #[get = "pub(crate)"]
-    conn_manager: PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
     // The byte level network controller
     #[get = "pub"]
     byte_network_controller: BN,
 }
 
 pub type NodeInputStub<R, O, S, A> = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
-pub type NodeStubController<CN, R, O, S, A> = PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
+pub type NodeStubController<NI, CN, R, O, S, A> = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
 impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
     where R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
           BN: Clone, CN: Clone
 {
-    type NetworkController = PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
+    type NetworkController = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
     type InputStub = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
     pub fn initialize(network_info: Arc<NI>, config: BN::Config) -> Result<(Arc<Self>, ReconfigurationMessageHandler)>
-        where BN: ByteNetworkControllerInit<NI, PeerConnectionManager<CN, R, O, S, A, EnumLookupTable<R, O, S, A>>, CN, PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>>,
+        where BN: ByteNetworkControllerInit<NI, PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>, CN, PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>>,
               NI: NetworkInformationProvider,
               CN: ByteNetworkStub {
         let reconf = ReconfigurationMessageHandler::initialize();
@@ -84,10 +84,10 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
 
         let rng = Arc::new(ThreadSafePrng::new());
 
-        let connection_controller = PeerConnectionManager::initialize(our_id, our_type, lookup_table, rng.clone())?;
+        let connection_controller = PeerConnectionManager::initialize(network_info.clone(), our_id, our_type, lookup_table, rng.clone())?;
 
         // Initialize the underlying byte level network controller
-        let network_controller = BN::initialize_controller(reconf.clone(), network_info.clone(), config, connection_controller.clone())?;
+        let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
 
         Ok((Arc::new(Self {
             id: our_id,

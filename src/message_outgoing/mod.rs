@@ -16,6 +16,7 @@ use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager};
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, StoredSerializedMessage, WireMessage};
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
 
@@ -31,16 +32,16 @@ pub struct SendTo<CN, R, O, S, A>
     shared: Option<Arc<KeyPair>>,
     nonce: u64,
     peer: PeerOutgoingConnection<CN, R, O, S, A>,
-    authenticated_state: bool
+    authenticated_state: bool,
 }
 
 impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable, CN: Clone {
     pub fn initialize_send_tos_serialized<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
-                                             rng: &Arc<ThreadSafePrng>, target: NodeId)
-                                             -> (Option<Self>, Option<Self>)
-        where L: Clone + Send, {
+                                                 rng: &Arc<ThreadSafePrng>, target: NodeId)
+                                                 -> (Option<Self>, Option<Self>)
+        where L: Clone + Send,  NI: NetworkInformationProvider {
         let mut send_to_me = None;
         let mut send_tos = None;
 
@@ -78,9 +79,9 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     }
 
     pub fn initialize_send_tos<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
-                                  rng: &Arc<ThreadSafePrng>, targets: impl Iterator<Item=NodeId>)
-                                  -> (Option<Self>, Option<SendTos<CN, R, O, S, A>>)
-        where L: LookupTable<R, O, S, A> {
+                                      rng: &Arc<ThreadSafePrng>, targets: impl Iterator<Item=NodeId>)
+                                      -> (Option<Self>, Option<SendTos<CN, R, O, S, A>>)
+        where L: LookupTable<R, O, S, A>, NI: NetworkInformationProvider {
         let mut send_to_me = None;
         let mut send_tos = Some(SmallVec::new());
 
@@ -171,15 +172,16 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     }
 }
 
-pub fn send_message_to_targets<CN, R, O, S, A, L>(conn_manager: &PeerConnectionManager<CN, R, O, S, A, L>,
-                                                  shared: Option<&Arc<KeyPair>>,
-                                                  rng: &Arc<ThreadSafePrng>,
-                                                  message: ModMessageWrapped<R, O, S, A>,
-                                                  targets: impl Iterator<Item=NodeId>, )
+pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
+                                                      shared: Option<&Arc<KeyPair>>,
+                                                      rng: &Arc<ThreadSafePrng>,
+                                                      message: ModMessageWrapped<R, O, S, A>,
+                                                      targets: impl Iterator<Item=NodeId>, )
     where CN: ByteNetworkStub + 'static,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          L: LookupTable<R, O, S, A> {
+          L: LookupTable<R, O, S, A>,
+          NI: NetworkInformationProvider {
     let (send_to_me, send_tos) = SendTo::initialize_send_tos(conn_manager, shared, rng, targets);
 
     atlas_common::threadpool::execute(move || {
@@ -218,13 +220,14 @@ pub fn send_message_to_targets<CN, R, O, S, A, L>(conn_manager: &PeerConnectionM
     });
 }
 
-pub fn send_serialized_message_to_target<CN, R, O, S, A, L>(conn_manager: &PeerConnectionManager<CN, R, O, S, A, L>,
-                                                            message: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>,
-                                                            target: NodeId)
+pub fn send_serialized_message_to_target<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
+                                                                message: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>,
+                                                                target: NodeId)
     where CN: ByteNetworkStub + 'static,
           R: Serializable + 'static, O: Serializable + 'static,
           S: Serializable + 'static, A: Serializable + 'static,
-          L: LookupTable<R, O, S, A> {
+          L: LookupTable<R, O, S, A>,
+          NI: NetworkInformationProvider {
     let (send_to_me, send_tos) = SendTo::initialize_send_tos_serialized(conn_manager, None, conn_manager.rng(), target);
 
     atlas_common::threadpool::execute(move || {
