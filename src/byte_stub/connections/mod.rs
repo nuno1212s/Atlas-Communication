@@ -17,7 +17,7 @@ pub trait NetworkConnectionController: Send + Sync {
     fn currently_connected_nodes(&self) -> Vec<NodeId>;
 
     /// Connect to a given node
-    fn connect_to_node(self: &Arc<Self>, node: NodeId) -> Vec<OneShotRx<Result<()>>>;
+    fn connect_to_node(self: &Arc<Self>, node: NodeId) -> Result<Vec<OneShotRx<Result<()>>>>;
 
     // Destroy our connection to a given node
     fn disconnect_from_node(self: &Arc<Self>, node: &NodeId) -> Result<()>;

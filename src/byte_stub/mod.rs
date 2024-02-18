@@ -271,7 +271,7 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
     pub fn initialize_connection(&self, node: NodeId, node_stub: CN)
                                  -> Result<PeerConnection<CN, R, O, S, A, L>>
         where L: LookupTable<R, O, S, A> {
-        let is_known = self.network_info.get_node_type(&node).is_some();
+        let is_known = self.network_info.get_node_info(&node).is_some();
 
         Ok(PeerConnection {
             authenticated: Arc::new(AtomicBool::new(is_known)),
@@ -312,6 +312,7 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
 
     fn generate_stub_for(&self, node: NodeId, byte_stub: CN) -> Result<PeerIncomingConnection<R, O, S, A, L>>
         where CN: ByteNetworkStub {
+
         let connection = self.initialize_connection(node, byte_stub)?;
 
         let incoming_conn = connection.incoming_connection.clone();
@@ -334,6 +335,7 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
 impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable, CN: Clone, L: Clone {
+
     pub fn has_connection(&self, node: &NodeId) -> bool {
         self.connection_map.lock().unwrap().contains_key(node)
     }

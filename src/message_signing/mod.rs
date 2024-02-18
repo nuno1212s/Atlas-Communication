@@ -3,6 +3,7 @@ use atlas_common::crypto::hash::{Context, Digest};
 use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
 use atlas_common::Err;
 use atlas_common::node_id::NodeId;
+use crate::reconfiguration::NodeInfo;
 use crate::message::{Buf, Header, verify_validity, WireMessage};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
@@ -35,7 +36,9 @@ pub(crate) fn verify_ser_message_validity(network_info: &impl NetworkInformation
         return Err!(IngestionError::DigestDoesNotMatch(digest, header.digest().clone()));
     }
 
-    let pub_key = network_info.get_public_key(&header.from());
+    let node_info = network_info.get_node_info(&header.from());
+
+    let pub_key = node_info.as_ref().map(NodeInfo::public_key);
 
     if let Some(key) = pub_key {
         if !verify_validity(header, message, true, Some(&key)) {

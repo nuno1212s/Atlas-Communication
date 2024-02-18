@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use anyhow::Context;
 
 use bytes::Bytes;
 use either::Either;
+use getset::{CopyGetters, Getters};
 use smallvec::SmallVec;
 
 use log::{error, trace};
@@ -24,14 +26,17 @@ const NODE_QUORUM_SIZE: usize = 32;
 
 type SendTos<CN, R, O, S, A> = SmallVec<[SendTo<CN, R, O, S, A>; NODE_QUORUM_SIZE]>;
 
+#[derive(Getters, CopyGetters)]
 pub struct SendTo<CN, R, O, S, A>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
     from: NodeId,
+    #[get = "pub"]
     to: NodeId,
     shared: Option<Arc<KeyPair>>,
     nonce: u64,
     peer: PeerOutgoingConnection<CN, R, O, S, A>,
+    #[get_copy = "pub(crate)"]
     authenticated_state: bool,
 }
 
@@ -41,7 +46,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     pub fn initialize_send_tos_serialized<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
                                                  rng: &Arc<ThreadSafePrng>, target: NodeId)
                                                  -> (Option<Self>, Option<Self>)
-        where L: Clone + Send,  NI: NetworkInformationProvider {
+        where L: Clone + Send, NI: NetworkInformationProvider {
         let mut send_to_me = None;
         let mut send_tos = None;
 
@@ -146,7 +151,8 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
             (PeerOutgoingConnection::OutgoingStub(stub), Either::Right((msg_mod, buf, digest))) => {
                 let wire_msg = WireMessage::new(self.from, self.to, msg_mod, buf, self.nonce, Some(digest), key_pair);
 
-                stub.dispatch_message(wire_msg).unwrap();
+                stub.dispatch_message(wire_msg)
+                    .context(format!("Failed to send message to node {:?} ", self.to)).unwrap();
             }
             _ => unreachable!()
         }
@@ -165,7 +171,8 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
 
                 let wire_msg = WireMessage::from_parts(header, module, buf).unwrap();
 
-                stub.dispatch_message(wire_msg).unwrap();
+                stub.dispatch_message(wire_msg)
+                    .context(format!("Failed to send message to node {:?} ", self.to)).unwrap();
             }
             _ => unreachable!()
         }
@@ -214,7 +221,18 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnect
 
         if let Some(mut send_tos) = send_tos {
             send_tos.into_iter().for_each(|send_to| {
-                send_to.value(Either::Right((message_module.clone(), buf.clone(), digest.clone())));
+                if send_to.authenticated_state() {
+                    send_to.value(Either::Right((message_module.clone(), buf.clone(), digest.clone())));
+                } else {
+                    match &message_module {
+                        MessageModule::Reconfiguration => {
+                            send_to.value(Either::Right((message_module.clone(), buf.clone(), digest.clone())));
+                        }
+                        _ => {
+                            error!("Attempted to send message to node {:?} while unauthenticated", send_to.to());
+                        }
+                    }
+                }
             });
         }
     });
@@ -234,7 +252,18 @@ pub fn send_serialized_message_to_target<NI, CN, R, O, S, A, L>(conn_manager: &P
         if let Some(send_to_me) = send_to_me {
             send_to_me.value_ser(message);
         } else if let Some(mut send_to) = send_tos {
-            send_to.value_ser(message)
+            if send_to.authenticated_state() {
+                send_to.value_ser(message)
+            } else {
+                match &message.message().original().get_module() {
+                    MessageModule::Reconfiguration => {
+                        send_to.value_ser(message)
+                    }
+                    _ => {
+                        error!("Attempted to send message to node {:?} while unauthenticated", send_to.to());
+                    }
+                }
+            }
         }
     });
 }

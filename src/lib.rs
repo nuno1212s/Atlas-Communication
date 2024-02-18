@@ -77,20 +77,19 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
               CN: ByteNetworkStub {
         let reconf = ReconfigurationMessageHandler::initialize();
 
-        let our_id = network_info.get_own_id();
-        let our_type = network_info.get_own_node_type();
+        let own_info = network_info.own_node_info();
 
         let lookup_table = EnumLookupTable::default();
 
         let rng = Arc::new(ThreadSafePrng::new());
 
-        let connection_controller = PeerConnectionManager::initialize(network_info.clone(), our_id, our_type, lookup_table, rng.clone())?;
+        let connection_controller = PeerConnectionManager::initialize(network_info.clone(), own_info.node_id(), own_info.node_type(), lookup_table, rng.clone())?;
 
         // Initialize the underlying byte level network controller
         let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
 
         Ok((Arc::new(Self {
-            id: our_id,
+            id: own_info.node_id(),
             network_info,
             rng,
             conn_manager: connection_controller,

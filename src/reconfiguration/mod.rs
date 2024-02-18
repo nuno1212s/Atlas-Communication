@@ -1,39 +1,39 @@
-use crate::message::{StoredMessage};
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::anyhow;
+use getset::{CopyGetters, Getters};
+
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
+use atlas_common::channel;
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::peer_addr::PeerAddr;
-use atlas_common::channel;
 
-use std::sync::{Arc};
-use std::time::Duration;
-use anyhow::anyhow;
-use getset::Getters;
-use atlas_common::maybe_vec::MaybeVec;
+#[derive(Clone, Getters, CopyGetters, Debug)]
+#[cfg_attr(feature = "serialize_serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct NodeInfo {
+    #[get_copy = "pub"]
+    node_id: NodeId,
+    #[get_copy = "pub"]
+    node_type: NodeType,
+    #[get = "pub"]
+    public_key: PublicKey,
+    #[get = "pub"]
+    addr: PeerAddr,
+}
 
 /// Represents the network information that a node needs to know about other nodes
 pub trait NetworkInformationProvider: Send + Sync {
-    /// Get the node id of our own node
-    fn get_own_id(&self) -> NodeId;
-
-    /// Get the node address of our own node
-    fn get_own_addr(&self) -> PeerAddr;
+    /// Get our own node info
+    fn own_node_info(&self) -> &NodeInfo;
 
     /// Get our own key pair
     fn get_key_pair(&self) -> &Arc<KeyPair>;
 
-    /// Get your own node type
-    fn get_own_node_type(&self) -> NodeType;
-
-    /// Get the node type for a given node
-    fn get_node_type(&self, node: &NodeId) -> Option<NodeType>;
-
-    /// Get the public key of a given node
-    fn get_public_key(&self, node: &NodeId) -> Option<PublicKey>;
-
-    /// Get the peer addr for a given node
-    fn get_addr_for_node(&self, node: &NodeId) -> Option<PeerAddr>;
+    /// Get the node info for a given node
+    fn get_node_info(&self, node: &NodeId) -> Option<NodeInfo>;
 }
 
 /// The reconfiguration network update trait, to send updates about newly discovered
@@ -111,6 +111,16 @@ impl ReconfigurationMessageHandler {
     }
 }
 
+impl NodeInfo {
+    pub fn new(node_id: NodeId, node_type: NodeType, public_key: PublicKey, addr: PeerAddr) -> Self {
+        NodeInfo {
+            node_id,
+            node_type,
+            public_key,
+            addr,
+        }
+    }
+}
 
 impl ReconfigurationNetworkUpdate for ReconfigurationMessageHandler {
     fn send_reconfiguration_update(&self, update: NetworkUpdateMessage) -> Result<()> {

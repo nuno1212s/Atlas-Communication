@@ -18,6 +18,7 @@ pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage,
           S: Serializable,
           A: Serializable
 {
+
     if let Err(e) = verify_ser_message_validity(network_info, message.header(), message.payload_buf()) {
         return Err(e);
     }
