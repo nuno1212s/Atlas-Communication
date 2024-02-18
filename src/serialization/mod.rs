@@ -66,9 +66,9 @@ pub fn serialize_digest<W, T>(message: &T::Message, w: &mut W) -> Result<Digest>
     Ok(ctx.finish())
 }
 
-pub fn digest_message(message: &Buf) -> Result<Digest> {
+pub fn digest_message(message: &Buf) -> Digest {
     let mut ctx = Context::new();
     ctx.update(message.as_ref());
-    Ok(ctx.finish())
+    ctx.finish()
 }
 

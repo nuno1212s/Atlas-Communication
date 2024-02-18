@@ -1,8 +1,10 @@
-use atlas_common::error::*;
+use anyhow::Error;
+use thiserror::Error;
+use atlas_common::Err;
 
-use crate::lookup_table::{LookupTable, MessageModuleSerialization, PeerStubLookupTable};
+use crate::lookup_table::{LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable};
 use crate::message::WireMessage;
-use crate::message_signing::verify_ser_message_validity;
+use crate::message_signing::{IngestionError, verify_ser_message_validity};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::{deserialize_message, Serializable};
 
@@ -10,20 +12,29 @@ use crate::serialization::{deserialize_message, Serializable};
 /// Requires the lookup table to be able to get the appropriate type to deserialize the message.
 /// Then, stubs are retrieved from the peer stub lookup table and the message is pushed to the appropriate stub.
 pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage,
+                                                       authenticated: bool,
                                                        network_info: &impl NetworkInformationProvider,
                                                        lookup_table: &impl LookupTable<R, O, S, A>,
-                                                       stubs: &impl PeerStubLookupTable<R, O, S, A>) -> Result<()>
+                                                       stubs: &impl PeerStubLookupTable<R, O, S, A>) -> Result<(), IngestMessageError>
     where R: Serializable,
           O: Serializable,
           S: Serializable,
           A: Serializable
 {
-
-    if let Err(e) = verify_ser_message_validity(network_info, message.header(), message.payload_buf()) {
-        return Err(e);
-    }
-
     let (header, module, message) = message.into_inner();
+
+    if !authenticated {
+        match module {
+            MessageModule::Reconfiguration => {},
+            _ => {
+                return Err!(IngestMessageError::UnAuthenticatedMessage(module));
+            }
+        }
+    } else {
+        if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
+            return Err!(e);
+        }
+    }
 
     // FIXME: Is this part with the lookup table even necessary? We just directly type in the types anyways so I think it is redundant.
     let serialization_mod = lookup_table.get_module_for_message(&module);
@@ -54,4 +65,14 @@ pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage,
     }
 
     Ok(())
+}
+
+#[derive(Debug, Error)]
+pub enum IngestMessageError {
+    #[error("Failed to deserialize message: {0:?}")]
+    DeserializationError(#[from] Error),
+    #[error("Failed to process wire message: {0:?}")]
+    SignatureVerificationFailure(#[from] IngestionError),
+    #[error("Attempted to process message without authenticated flag, but message was not a reconfiguration message (module: {0:?})")]
+    UnAuthenticatedMessage(MessageModule)
 }

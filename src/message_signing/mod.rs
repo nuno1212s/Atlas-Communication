@@ -29,8 +29,8 @@ pub fn verify_message_validity<M>(network_info: &impl NetworkInformationProvider
 /// Verifies the validity of a serialized network message
 ///
 /// Guarantees AUTHENTICITY, INTEGRITY and NON-REPUDIATION of the message.
-pub(crate) fn verify_ser_message_validity(network_info: &impl NetworkInformationProvider, header: &Header, message: &Buf) -> atlas_common::error::Result<()> {
-    let digest = serialization::digest_message(message)?;
+pub(crate) fn verify_ser_message_validity(network_info: &impl NetworkInformationProvider, header: &Header, message: &Buf) -> Result<(), IngestionError> {
+    let digest = serialization::digest_message(message);
 
     if *header.digest() != digest {
         return Err!(IngestionError::DigestDoesNotMatch(digest, header.digest().clone()));

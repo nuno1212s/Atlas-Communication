@@ -228,9 +228,11 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
 
         let loopback = PeerOutgoingConnection::LoopbackStub(LoopbackOutgoingStub::init(table.clone()));
 
+        let authenticated = Arc::new(AtomicBool::new(true));
+
         Ok(PeerConnection {
-            authenticated: Arc::new(AtomicBool::new(true)),
-            incoming_connection: PeerIncomingConnection::initialize_incoming_conn(l_table, table),
+            authenticated: authenticated.clone(),
+            incoming_connection: PeerIncomingConnection::initialize_incoming_conn(authenticated, l_table, table),
             outgoing_connection: loopback,
         })
     }
@@ -252,11 +254,11 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
 
     /// Initialize an incoming connection for a given node
     /// This will initialize all the stubs required to handle messages from that node
-    pub fn initialize_incoming_connection_for(&self, node_id: NodeId) -> Result<PeerIncomingConnection<R, O, S, A, L>>
+    pub fn initialize_incoming_connection_for(&self, authenticated: Arc<AtomicBool>, node_id: NodeId) -> Result<PeerIncomingConnection<R, O, S, A, L>>
         where L: LookupTable<R, O, S, A> {
         let lookup_table = self.lookup_table.clone();
 
-        Ok(PeerIncomingConnection::initialize_incoming_conn(lookup_table, Self::initialize_stub_lookup_table(&self.controller, node_id)?))
+        Ok(PeerIncomingConnection::initialize_incoming_conn(authenticated, lookup_table, Self::initialize_stub_lookup_table(&self.controller, node_id)?))
     }
 
     /// Initialize an outgoing connection for a given node, given a byte level stub to that
@@ -273,9 +275,11 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
         where L: LookupTable<R, O, S, A> {
         let is_known = self.network_info.get_node_info(&node).is_some();
 
+        let authenticated = Arc::new(AtomicBool::new(is_known));
+
         Ok(PeerConnection {
-            authenticated: Arc::new(AtomicBool::new(is_known)),
-            incoming_connection: self.initialize_incoming_connection_for(node)?,
+            authenticated: authenticated.clone(),
+            incoming_connection: self.initialize_incoming_connection_for(authenticated, node)?,
             outgoing_connection: self.initialize_outgoing_connection_for(node, node_stub)?,
         })
     }
@@ -312,7 +316,6 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
 
     fn generate_stub_for(&self, node: NodeId, byte_stub: CN) -> Result<PeerIncomingConnection<R, O, S, A, L>>
         where CN: ByteNetworkStub {
-
         let connection = self.initialize_connection(node, byte_stub)?;
 
         let incoming_conn = connection.incoming_connection.clone();
@@ -335,7 +338,6 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
 impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable, CN: Clone, L: Clone {
-
     pub fn has_connection(&self, node: &NodeId) -> bool {
         self.connection_map.lock().unwrap().contains_key(node)
     }

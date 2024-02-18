@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::anyhow;
 use enum_map::EnumMap;
 use atlas_common::node_id::{NodeId, NodeType};
@@ -57,6 +58,7 @@ pub struct PeerStubLookupTable<R, O, S, A>
 pub struct PeerIncomingConnection<R, O, S, A, L>
     where R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
+    authenticated: Arc<AtomicBool>,
     lookup_table: L,
     stub_lookup: PeerStubLookupTable<R, O, S, A>,
 }
@@ -86,8 +88,9 @@ impl<R, O, S, A, L> PeerIncomingConnection<R, O, S, A, L>
     where L: LookupTable<R, O, S, A>,
           R: Serializable, O: Serializable,
           S: Serializable, A: Serializable {
-    pub fn initialize_incoming_conn(lookup_table: L, peer_stub: PeerStubLookupTable<R, O, S, A>) -> Self {
+    pub fn initialize_incoming_conn(authenticated: Arc<AtomicBool>, lookup_table: L, peer_stub: PeerStubLookupTable<R, O, S, A>) -> Self {
         Self {
+            authenticated,
             lookup_table,
             stub_lookup: peer_stub,
         }
@@ -105,9 +108,10 @@ impl<R, O, S, A, L> NodeIncomingStub for PeerIncomingConnection<R, O, S, A, L>
         let lookup_table = self.lookup_table.clone();
         let peer_stub_lookup = self.stub_lookup.clone();
         let network_info = network_info.clone();
+        let authenticated = self.authenticated.load(Ordering::Relaxed);
 
         atlas_common::threadpool::execute(move || {
-            quiet_unwrap!(message_ingestion::process_wire_message_message(message, &*network_info, &lookup_table, &peer_stub_lookup));
+            quiet_unwrap!(message_ingestion::process_wire_message_message(message, authenticated, &*network_info, &lookup_table, &peer_stub_lookup));
         });
 
         Ok(())
@@ -224,6 +228,7 @@ impl<R, O, S, A, L> Clone for PeerIncomingConnection<R, O, S, A, L>
           S: Serializable, A: Serializable {
     fn clone(&self) -> Self {
         Self {
+            authenticated: self.authenticated.clone(),
             lookup_table: self.lookup_table.clone(),
             stub_lookup: self.stub_lookup.clone(),
         }
