@@ -269,7 +269,7 @@ fn generate_stub_controller_for<M>(my_id: NodeId, my_node_type: NodeType, messag
         NodeType::Replica => {
             match message_mod {
                 MessageModule::Reconfiguration | MessageModule::Protocol | MessageModule::StateProtocol => {
-                    let (unpooled_stub, rx) = unpooled_stub::UnpooledStubManagement::initialize_controller(Default::default());
+                    let (unpooled_stub, rx) = unpooled_stub::UnpooledStubManagement::initialize_controller(Default::default(), message_mod);
 
                     let peer_stub_controller = PeerStubControllers::Unpooled(unpooled_stub);
                     let stub_output = StubEndpoint::Unpooled(rx);
@@ -295,7 +295,7 @@ fn generate_stub_controller_for<M>(my_id: NodeId, my_node_type: NodeType, messag
                 MessageModule::Reconfiguration | MessageModule::Protocol | MessageModule::StateProtocol | MessageModule::Application => {
 
                     //TODO: We should receive (maybe individual?) configs as arguments, not use the default
-                    let (unpooled_stub, rx) = unpooled_stub::UnpooledStubManagement::initialize_controller(Default::default());
+                    let (unpooled_stub, rx) = unpooled_stub::UnpooledStubManagement::initialize_controller(Default::default(), message_mod);
 
                     let peer_stub_controller = PeerStubControllers::Unpooled(unpooled_stub);
                     let stub_output = StubEndpoint::Unpooled(rx);

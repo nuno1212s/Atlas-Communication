@@ -5,6 +5,7 @@ use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::{channel, Err};
 use atlas_common::node_id::NodeId;
 use crate::config::UnpooledConnection;
+use crate::lookup_table::MessageModule;
 
 use crate::message::StoredMessage;
 use crate::stub::ModuleIncomingStub;
@@ -20,8 +21,8 @@ pub struct UnpooledStubManagement<M> {
 
 impl<M> UnpooledStubManagement<M> {
 
-    pub fn initialize_controller(config: UnpooledConnection) -> (Self, UnpooledStubRX<M>) {
-        let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some("Unpooled stub"));
+    pub fn initialize_controller(config: UnpooledConnection, module: MessageModule) -> (Self, UnpooledStubRX<M>) {
+        let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some(format!("Unpooled stub {:?}", module)));
 
         (Self {
             tx
