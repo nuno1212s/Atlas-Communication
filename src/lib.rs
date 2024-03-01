@@ -12,6 +12,7 @@ use atlas_common::prng::ThreadSafePrng;
 use crate::byte_stub::{ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager};
 use crate::byte_stub::incoming::PeerIncomingConnection;
 use crate::lookup_table::EnumLookupTable;
+use crate::network_information::initialize_network_info_handle;
 use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, BatchedModuleIncomingStub, NetworkStub, OperationStub, ReconfigurationStub, RegularNetworkStub, StateProtocolStub};
@@ -27,6 +28,7 @@ pub mod message_signing;
 mod message_ingestion;
 pub mod metric;
 mod message_outgoing;
+mod network_information;
 
 
 /// The struct that coordinates the entire network stack
@@ -71,12 +73,10 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
 
     type InputStub = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
-    pub fn initialize(network_info: Arc<NI>, config: BN::Config) -> Result<(Arc<Self>, ReconfigurationMessageHandler)>
+    pub fn initialize(network_info: Arc<NI>, config: BN::Config, reconfiguration_msg: ReconfigurationMessageHandler) -> Result<Arc<Self>>
         where BN: ByteNetworkControllerInit<NI, PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>, CN, PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>>,
-              NI: NetworkInformationProvider,
-              CN: ByteNetworkStub {
-        let reconf = ReconfigurationMessageHandler::initialize();
-
+              NI: NetworkInformationProvider + 'static,
+              CN: ByteNetworkStub + 'static {
         let own_info = network_info.own_node_info();
 
         let lookup_table = EnumLookupTable::default();
@@ -85,16 +85,19 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
 
         let connection_controller = PeerConnectionManager::initialize(network_info.clone(), own_info.node_id(), own_info.node_type(), lookup_table, rng.clone())?;
 
+        // Initialize the thread that will receive the updates from the reconfiguration protocol
+        initialize_network_info_handle(reconfiguration_msg, connection_controller.clone());
+
         // Initialize the underlying byte level network controller
         let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
 
-        Ok((Arc::new(Self {
+        Ok(Arc::new(Self {
             id: own_info.node_id(),
             network_info,
             rng,
             conn_manager: connection_controller,
             byte_network_controller: network_controller,
-        }), reconf))
+        }))
     }
 
     pub fn init_op_stub(&self) -> OperationStub<NI, CN, BN::ConnectionController, R, O, S, A>

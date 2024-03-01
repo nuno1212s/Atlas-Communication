@@ -8,7 +8,7 @@ use atlas_common::node_id::{NodeId, NodeType};
 use crate::reconfiguration::{NetworkUpdateMessage, ReconfigurationMessageHandler};
 
 /// The trait required for a connection manager to be usable with the networking information
-pub(super) trait PendingConnectionManagement: Send {
+pub(crate) trait PendingConnectionManagement: Send {
     // Check if we have a pending connection to a given node
     fn has_pending_connection(&self, node: &NodeId) -> bool;
 
@@ -17,7 +17,7 @@ pub(super) trait PendingConnectionManagement: Send {
 }
 
 /// Initialize the network information thread
-pub(super) fn initialize_network_info_handle<PM>(reconfiguration_message_handler: ReconfigurationMessageHandler,
+pub(crate) fn initialize_network_info_handle<PM>(reconfiguration_message_handler: ReconfigurationMessageHandler,
                                                  connection_handler: PM)
     where PM: PendingConnectionManagement + 'static {
     std::thread::Builder::new()

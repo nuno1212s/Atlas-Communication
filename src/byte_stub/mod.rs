@@ -13,10 +13,10 @@ use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
+use crate::network_information::PendingConnectionManagement;
 use crate::byte_stub::connections::NetworkConnectionController;
 
 use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, PeerStubLookupTable, pooled_stub, unpooled_stub};
-use crate::byte_stub::network_information::PendingConnectionManagement;
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
@@ -28,7 +28,6 @@ use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 pub mod incoming;
 pub(crate) mod outgoing;
 pub mod connections;
-mod network_information;
 
 pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 
@@ -211,7 +210,7 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
 
         let active_conns = ActiveConnections::init(id, loopback);
 
-        Ok(Self {
+        let connection_manager = Self {
             node_id: id,
             lookup_table,
             rng,
@@ -219,7 +218,9 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
             controller: Arc::new(stub_controller),
             endpoints: Arc::new(endpoints),
             connections: Arc::new(active_conns),
-        })
+        };
+
+        Ok(connection_manager)
     }
 
     fn initialize_loopback(controller: &PeerStubController<R, O, S, A>, l_table: L, node: NodeId) -> Result<PeerConnection<CN, R, O, S, A, L>>
