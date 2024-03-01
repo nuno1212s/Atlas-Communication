@@ -7,12 +7,13 @@ use futures::{AsyncWrite, AsyncWriteExt};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use atlas_common::crypto::hash::Digest;
-use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
+use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
 use atlas_common::Err;
 use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use atlas_common::ordering::{Orderable, SeqNo};
 use crate::lookup_table::MessageModule;
+use crate::message_signing::IngestionError;
 
 /// The buffer type used to serialize messages into.
 pub type Buf = Bytes;
@@ -261,21 +262,19 @@ impl WireMessage {
     pub const CURRENT_VERSION: u32 = 0;
 
     /// Wraps a `Header` and a byte array payload into a `WireMessage`.
-    pub fn from_parts(header: Header, message_mod: MessageModule, payload: Buf) -> Result<Self> {
+    pub fn from_parts(header: Header, message_mod: MessageModule, payload: Buf) -> std::result::Result<Self, MessageErrors> {
         let wm = Self { header, message_mod, payload };
 
-        if !wm.is_valid(None, true) {
-            return Err!(MessageErrors::InvalidWireMessage);
-        }
+        wm.is_valid(None, true)?;
 
         Ok(wm)
     }
 
-    pub fn from_header(header: Header, message_mod: MessageModule) -> Result<Self> {
+    pub fn from_header(header: Header, message_mod: MessageModule) -> std::result::Result<Self, MessageErrors> {
         let wm = Self { header, message_mod, payload: Buf::new() };
-        if !wm.is_valid(None, false) {
-            return Err!(MessageErrors::InvalidWireMessage);
-        }
+        
+        wm.is_valid(None, false)?;
+        
         Ok(wm)
     }
 
@@ -356,7 +355,7 @@ impl WireMessage {
 
     /// Checks for the correctness of the `WireMessage`. This implies
     /// checking its signature, if a `PublicKey` is provided.
-    pub fn is_valid(&self, public_key: Option<&PublicKey>, check_payload_len: bool) -> bool {
+    pub fn is_valid(&self, public_key: Option<&PublicKey>, check_payload_len: bool) -> std::result::Result<(), MessageErrors> {
         verify_validity(&self.header, &self.payload, check_payload_len, public_key)
     }
 
@@ -397,13 +396,13 @@ impl WireMessage {
     }
 }
 
-pub fn verify_validity(header: &Header, message: &Buf, check_payload_len: bool, public_key: Option<&PublicKey>) -> bool {
+pub fn verify_validity(header: &Header, message: &Buf, check_payload_len: bool, public_key: Option<&PublicKey>) -> std::result::Result<(), MessageErrors> {
     let preliminary_check_failed =
         header.version != WireMessage::CURRENT_VERSION
             || (check_payload_len && header.length != message.len() as u64);
 
     if preliminary_check_failed {
-        return false;
+        return Err!(MessageErrors::InvalidWireMessage);
     }
 
     public_key
@@ -415,9 +414,10 @@ pub fn verify_validity(header: &Header, message: &Buf, check_payload_len: bool, 
                 header.to,
                 header.nonce,
                 &header.digest[..],
-            ).is_ok()
+            )
         })
-        .unwrap_or(true)
+        .unwrap_or(Ok(()))
+        .map_err(|e| e.into())
 }
 
 impl Debug for Header {
@@ -440,6 +440,8 @@ impl Debug for Header {
 pub enum MessageErrors {
     #[error("The wire message is not valid")]
     InvalidWireMessage,
+    #[error("Verification error {0:?}")]
+    VerificationError(#[from] VerifyError),
     #[error("The header has an invalid size {0}")]
     InvalidSizeHeader(usize),
     #[error("Destination header is too small {0}")]

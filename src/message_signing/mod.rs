@@ -1,10 +1,10 @@
 use thiserror::Error;
 use atlas_common::crypto::hash::{Context, Digest};
-use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
+use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
 use atlas_common::Err;
 use atlas_common::node_id::NodeId;
 use crate::reconfiguration::NodeInfo;
-use crate::message::{Buf, Header, verify_validity, WireMessage};
+use crate::message::{Buf, Header, MessageErrors, verify_validity, WireMessage};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
@@ -41,11 +41,9 @@ pub(crate) fn verify_ser_message_validity(network_info: &impl NetworkInformation
     let pub_key = node_info.as_ref().map(NodeInfo::public_key);
 
     if let Some(key) = pub_key {
-        if !verify_validity(header, message, true, Some(&key)) {
-            Err!(IngestionError::InvalidSignature)
-        } else {
-            Ok(())
-        }
+        verify_validity(header, message, true, Some(&key))?;
+        
+        Ok(())
     } else {
         Err!(IngestionError::NodeNotKnown(header.from()))
     }
@@ -109,7 +107,7 @@ pub(crate) fn verify_parts(
     to: u32,
     nonce: u64,
     payload_digest: &[u8],
-) -> atlas_common::error::Result<()> {
+) -> Result<(), VerifyError> {
     let digest = digest_parts(from, to, nonce, payload_digest);
     pk.verify(digest.as_ref(), sig)
 }
@@ -121,6 +119,6 @@ pub enum IngestionError {
     DigestDoesNotMatch(Digest, Digest),
     #[error("We do not know the node {0:?} (No Public key available)")]
     NodeNotKnown(NodeId),
-    #[error("The message we have received has an invalid signature")]
-    InvalidSignature,
+    #[error("The message we have received has an invalid signature {0:?}")]
+    InvalidSignature(#[from] MessageErrors),
 }

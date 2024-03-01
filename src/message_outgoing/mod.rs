@@ -189,8 +189,13 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnect
           S: Serializable + 'static, A: Serializable + 'static,
           L: LookupTable<R, O, S, A>,
           NI: NetworkInformationProvider {
+    
+    if let None = &shared {
+        trace!("Sending message from module {:?} without authentication", message.get_module());
+    }
+    
     let (send_to_me, send_tos) = SendTo::initialize_send_tos(conn_manager, shared, rng, targets);
-
+    
     atlas_common::threadpool::execute(move || {
         let mut buf = Vec::new();
 

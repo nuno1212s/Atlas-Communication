@@ -1,4 +1,5 @@
 use anyhow::Error;
+use log::warn;
 use thiserror::Error;
 use atlas_common::Err;
 
@@ -32,6 +33,8 @@ pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage,
         }
     } else {
         if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
+            warn!("Failed to verify message validity for message module: {:?}", module );
+            
             return Err!(e);
         }
     }
