@@ -22,7 +22,7 @@ pub struct UnpooledStubManagement<M> {
 impl<M> UnpooledStubManagement<M> {
 
     pub fn initialize_controller(config: UnpooledConnection, module: MessageModule) -> (Self, UnpooledStubRX<M>) {
-        let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some(format!("Unpooled stub {:?}", module)));
+        let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some(format!("Unpooled stub {:?} (Ingestion)", module)));
 
         (Self {
             tx

@@ -279,7 +279,7 @@ fn generate_stub_controller_for<M>(my_id: NodeId, my_node_type: NodeType, messag
                 MessageModule::Application => {
                     let config = ClientPoolConfig::default();
 
-                    let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some("Pooled stub"));
+                    let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some(format!("Pooled stub {:?} (Incoming)", message_mod)));
 
                     let stub_control = ConnectedPeersGroup::new(config, tx, rx.clone(), my_id);
 
