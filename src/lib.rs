@@ -1,90 +1,137 @@
-#![feature(async_fn_in_trait)]
+#![feature(return_position_impl_trait_in_trait)]
+#![feature(inherent_associated_types)]
 
 use std::sync::Arc;
-use std::time::Duration;
-use crate::serialize::Serializable;
+
+use getset::{CopyGetters, Getters};
+
 use atlas_common::error::*;
-#[cfg(feature = "serialize_serde")]
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use atlas_common::channel::OneShotRx;
-use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::NodeId;
-use crate::reconfiguration_node::{NetworkInformationProvider, ReconfigurationNode};
-use crate::protocol_node::ProtocolNetworkNode;
+use atlas_common::prng::ThreadSafePrng;
 
-pub mod serialize;
-pub mod message;
-pub mod cpu_workers;
-pub mod client_pooling;
+use crate::byte_stub::{ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager};
+use crate::byte_stub::incoming::PeerIncomingConnection;
+use crate::lookup_table::EnumLookupTable;
+use crate::network_information::initialize_network_info_handle;
+use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
+use crate::serialization::Serializable;
+use crate::stub::{ApplicationStub, BatchedModuleIncomingStub, NetworkStub, OperationStub, ReconfigurationStub, RegularNetworkStub, StateProtocolStub};
+
 pub mod config;
+pub mod byte_stub;
+pub mod stub;
+pub mod message;
+pub mod reconfiguration;
+pub mod lookup_table;
+pub mod serialization;
 pub mod message_signing;
+mod message_ingestion;
 pub mod metric;
-pub mod reconfiguration_node;
-pub mod protocol_node;
-pub mod conn_utils;
+mod message_outgoing;
+mod network_information;
 
-/// Actual node implementations
-//pub mod tcpip;
-//pub mod tcp_ip_simplex;
-pub mod mio_tcp;
 
-/// A trait defined that indicates how the connections are managed
-/// Allows us to verify various things about our current connections as well
-/// as establishing new ones.
-pub trait NodeConnections {
-
-    /// Are we currently connected to a given node?
-    fn is_connected_to_node(&self, node: &NodeId) -> bool;
-
-    /// How many nodes are we currently connected to in this node
-    fn connected_nodes_count(&self) -> usize;
-
-    /// Get the nodes we are connected to at this time
-    fn connected_nodes(&self) -> Vec<NodeId>;
-
-    /// Connect this node to another node.
-    /// This will attempt to create various connections,
-    /// depending on the configuration for concurrent connection count.
-    /// Returns a vec with the results of each of the attempted connections
-    fn connect_to_node(self: &Arc<Self>, node: NodeId) -> Vec<OneShotRx<Result<()>>>;
-
-    /// Disconnect this node from another node
-    async fn disconnect_from_node(&self, node: &NodeId) -> Result<()>;
+/// The struct that coordinates the entire network stack
+/// We have all of the abstractions here, as we want to handle as many
+/// possible combinations of implementations as possible
+///
+/// This module of Atlas is meant to translate our messages into their
+/// byte level representation, so they can be safely sent through the
+/// underlying network implementation, effectively making this completely
+/// abstract on the network type it's running in
+#[derive(CopyGetters, Getters)]
+pub struct NetworkManagement<NI, CN, BN, R, O, S, A>
+    where R: Serializable, O: Serializable,
+          S: Serializable, A: Serializable,
+          BN: Clone {
+    // The ID of our node
+    #[get_copy = "pub(crate)"]
+    id: NodeId,
+    // Information about the topology of the network
+    #[getset(get = "pub(crate)")]
+    network_info: Arc<NI>,
+    // The thread safe random number generator
+    #[get = "pub(crate)"]
+    rng: Arc<ThreadSafePrng>,
+    // The controller for all the connections that are incoming into our node
+    #[get = "pub(crate)"]
+    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    // The byte level network controller
+    #[get = "pub"]
+    byte_network_controller: BN,
 }
 
-pub trait NetworkNode {
+pub type NodeInputStub<R, O, S, A> = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
+pub type NodeStubController<NI, CN, R, O, S, A> = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
-    type ConnectionManager: NodeConnections;
+impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
+    where R: Serializable + 'static, O: Serializable + 'static,
+          S: Serializable + 'static, A: Serializable + 'static,
+          BN: Clone, CN: Clone
+{
+    type NetworkController = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
-    type NetworkInfoProvider: NetworkInformationProvider;
+    type InputStub = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
-    /// Reports the id of this `Node`.
-    fn id(&self) -> NodeId;
+    pub fn initialize(network_info: Arc<NI>, config: BN::Config, reconfiguration_msg: ReconfigurationMessageHandler) -> Result<Arc<Self>>
+        where BN: ByteNetworkControllerInit<NI, PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>, CN, PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>>,
+              NI: NetworkInformationProvider + 'static,
+              CN: ByteNetworkStub + 'static {
+        let own_info = network_info.own_node_info();
 
-    /// Get a handle to the connection manager of this node.
-    fn node_connections(&self) -> &Arc<Self::ConnectionManager>;
+        let lookup_table = EnumLookupTable::default();
 
-    fn network_info_provider(&self) -> &Arc<Self::NetworkInfoProvider>;
+        let rng = Arc::new(ThreadSafePrng::new());
+
+        let connection_controller = PeerConnectionManager::initialize(network_info.clone(), own_info.node_id(), own_info.node_type(), lookup_table, rng.clone())?;
+
+        // Initialize the thread that will receive the updates from the reconfiguration protocol
+        initialize_network_info_handle(reconfiguration_msg, connection_controller.clone());
+
+        // Initialize the underlying byte level network controller
+        let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
+
+        Ok(Arc::new(Self {
+            id: own_info.node_id(),
+            network_info,
+            rng,
+            conn_manager: connection_controller,
+            byte_network_controller: network_controller,
+        }))
+    }
+
+    pub fn init_op_stub(&self) -> OperationStub<NI, CN, BN::ConnectionController, R, O, S, A>
+        where BN: ByteNetworkController, {
+        OperationStub::new(self, self.byte_network_controller().connection_controller().clone())
+    }
+
+    pub fn init_reconf_stub(&self) -> ReconfigurationStub<NI, CN, BN::ConnectionController, R, O, S, A>
+        where BN: ByteNetworkController, {
+        ReconfigurationStub::new(self, self.byte_network_controller().connection_controller().clone())
+    }
+
+    pub fn init_state_stub(&self) -> StateProtocolStub<NI, CN, BN::ConnectionController, R, O, S, A>
+        where BN: ByteNetworkController, {
+        StateProtocolStub::new(self, self.byte_network_controller().connection_controller().clone())
+    }
+
+    pub fn init_app_stub(&self) -> ApplicationStub<NI, CN, BN::ConnectionController, R, O, S, A>
+        where BN: ByteNetworkController, {
+        ApplicationStub::new(self, self.byte_network_controller().connection_controller().clone())
+    }
 }
 
-/// A full network node implementation
-pub trait FullNetworkNode<NI, RM, PM>: ProtocolNetworkNode<PM> + ReconfigurationNode<RM> + Send + Sync
-    where
-        NI: NetworkInformationProvider,
-        RM: Serializable + 'static,
-        PM: Serializable + 'static {
-
-    /// The configuration type this node wants to accept
-    type Config;
-
-    /// Bootstrap the node
-    async fn bootstrap(id: NodeId, network_info_provider: Arc<NI>, node_config: Self::Config) -> Result<Self>
-        where Self: Sized;
-}
-
-#[derive(Error, Debug)]
-pub enum NetworkSendError {
-    #[error("Peer not found {0:?}")]
-    PeerNotFound(NodeId)
+impl<NI, CN, BN, R, O, S, A> Clone for NetworkManagement<NI, CN, BN, R, O, S, A>
+    where R: Serializable, O: Serializable,
+          S: Serializable, A: Serializable,
+          BN: Clone, CN: Clone {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            network_info: self.network_info.clone(),
+            rng: self.rng.clone(),
+            conn_manager: self.conn_manager.clone(),
+            byte_network_controller: self.byte_network_controller.clone(),
+        }
+    }
 }

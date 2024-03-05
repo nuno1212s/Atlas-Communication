@@ -1,60 +1,57 @@
-use intmap::IntMap;
-use rustls::{ClientConfig, ServerConfig};
-use serde::Deserialize;
-use atlas_common::crypto::signature::{KeyPair, PublicKey};
-use atlas_common::node_id::{NodeId, NodeType};
+use getset::{CopyGetters};
 
-/// Configuration needed for a mio server
-pub struct MioConfig {
-    // The general config of a node.
-    pub node_config: NodeConfig,
-    // How many workers should our mio server have
-    pub worker_count: usize,
-}
-
-pub struct NodeConfig {
-    /// TCP specific configuration
-    pub tcp_config: TcpConfig,
-    ///The configurations of the client pool config
-    pub client_pool_config: ClientPoolConfig,
-}
-
-pub struct TcpConfig {
-    /// Configurations specific to the networking
-    pub network_config: TlsConfig,
-    /// How many concurrent connections should be established between replica nodes of the system
-    pub replica_concurrent_connections: usize,
-    /// How many client concurrent connections should be established between replica <-> client connections
-    pub client_concurrent_connections: usize
-}
-
-pub struct PKConfig {
-    /// Our secret key pair.
-    pub sk: KeyPair,
-    /// The list of public keys of all nodes in the system.
-    pub pk: IntMap<PublicKey>,
-}
-
-pub struct TlsConfig {
-    /// The TLS configuration used to connect to replica nodes. (from client nodes)
-    pub async_client_config: ClientConfig,
-    /// The TLS configuration used to accept connections from client nodes.
-    pub async_server_config: ServerConfig,
-    ///The TLS configuration used to accept connections from replica nodes (Synchronously)
-    pub sync_server_config: ServerConfig,
-    ///The TLS configuration used to connect to replica nodes (from replica nodes) (Synchronousy)
-    pub sync_client_config: ClientConfig,
-}
-
+#[derive(CopyGetters)]
 pub struct ClientPoolConfig {
-    ///The max size for batches of client operations
-    pub batch_size: usize,
-    ///How many clients should be placed in a single collecting pool (seen in incoming_peer_handling)
-    pub clients_per_pool: usize,
-    ///The timeout for batch collection in each client pool.
-    /// (The first to reach between batch size and timeout)
-    pub batch_timeout_micros: u64,
-    ///How long should a client pool sleep for before attempting to collect requests again
-    /// (It actually will sleep between 3/4 and 5/4 of this value, to make sure they don't all sleep / wake up at the same time)
-    pub batch_sleep_micros: u64,
+    #[get_copy = "pub"]
+    batch_limit: usize,
+    #[get_copy = "pub"]
+    per_client_bound: usize,
+    #[get_copy = "pub"]
+    clients_per_pool: usize,
+    #[get_copy = "pub"]
+    batch_timeout_micros: u64,
+    #[get_copy = "pub"]
+    batch_sleep_micros: u64,
+    #[get_copy = "pub"]
+    channel_size: usize
+}
+
+impl ClientPoolConfig {
+    pub fn new(batch_limit: usize, per_client_bound: usize, clients_per_pool: usize, batch_timeout_micros: u64, batch_sleep_micros: u64, channel_size: usize) -> Self {
+        Self {
+            batch_limit,
+            per_client_bound,
+            clients_per_pool,
+            batch_timeout_micros,
+            batch_sleep_micros,
+            channel_size
+        }
+    }
+}
+
+impl Default for ClientPoolConfig {
+    fn default() -> Self {
+        Self {
+            batch_limit: 100,
+            per_client_bound: 100,
+            clients_per_pool: 100,
+            batch_timeout_micros: 1000,
+            batch_sleep_micros: 1000,
+            channel_size: 128
+        }
+    }
+}
+
+#[derive(CopyGetters)]
+pub struct UnpooledConnection {
+    #[get_copy = "pub"]
+    channel_size: usize
+}
+
+impl Default for UnpooledConnection {
+    fn default() -> Self {
+        Self {
+            channel_size: 100
+        }
+    }
 }

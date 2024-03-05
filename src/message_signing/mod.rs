@@ -1,133 +1,54 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
-use anyhow::anyhow;
-use intmap::IntMap;
+use thiserror::Error;
 use atlas_common::crypto::hash::{Context, Digest};
-use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
-use atlas_common::error::*;
-use crate::config::PKConfig;
-use crate::cpu_workers;
-use crate::message::{Header, NetworkMessageKind, WireMessage};
-use crate::reconfiguration_node::NetworkInformationProvider;
-use crate::serialize::{Buf, digest_message, Serializable};
+use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
+use atlas_common::Err;
+use atlas_common::node_id::NodeId;
+use crate::reconfiguration::NodeInfo;
+use crate::message::{Buf, Header, MessageErrors, verify_validity, WireMessage};
+use crate::reconfiguration::NetworkInformationProvider;
+use crate::serialization;
+use crate::serialization::Serializable;
 
-/// A trait that defines the signature verification function
-pub trait NetworkMessageSignatureVerifier<M, NI>
-    where M: Serializable, NI: NetworkInformationProvider, Self: Sized {
-    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: M::Message) -> Result<M::Message>;
+/// Verify the validity of a message, for any serializable type.
+/// Performs the serialization and follow up digest and signature verification of the byte message.
+///
+/// Guarantees AUTHENTICITY, INTEGRITY and NON-REPUDIATION of the message.
+pub fn verify_message_validity<M>(network_info: &impl NetworkInformationProvider, header: &Header, message: &M::Message) -> atlas_common::error::Result<()>
+    where M: Serializable {
+    let mut msg = Vec::new();
 
-    /// Verify the signature of the internal message structure
-    /// Returns Result<bool> where true means the signature is valid, false means it is not
-    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &M::Message, buf: &Buf) -> Result<()>;
+    serialization::serialize_message::<Vec<u8>, M>(&mut msg, message)?;
+
+    let message_bytes = Buf::from(msg);
+
+    verify_ser_message_validity(network_info, header, &message_bytes)?;
+
+    Ok(())
 }
 
-pub enum MessageKind {
-    Reconfig,
-    Protocol,
-}
+/// Verifies the validity of a serialized network message
+///
+/// Guarantees AUTHENTICITY, INTEGRITY and NON-REPUDIATION of the message.
+pub(crate) fn verify_ser_message_validity(network_info: &impl NetworkInformationProvider, header: &Header, message: &Buf) -> Result<(), IngestionError> {
+    let digest = serialization::digest_message(message);
 
-pub struct DefaultReconfigSignatureVerifier<RM: Serializable, PM: Serializable, NI: NetworkInformationProvider>(Arc<NI>, PhantomData<(RM, PM)>);
-
-impl<PM, RM, NI> NetworkMessageSignatureVerifier<RM, NI> for DefaultReconfigSignatureVerifier<RM, PM, NI>
-    where PM: Serializable, RM: Serializable, NI: NetworkInformationProvider + 'static {
-    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: RM::Message) -> Result<RM::Message> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!( "Could not find public key for peer"))?;
-
-        let sig = header.signature();
-
-        let network = NetworkMessageKind::<RM, PM>::from_reconfig(msg);
-
-        let (buf, digest) = cpu_workers::serialize_digest_no_threadpool(&network)?;
-
-        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
-
-        RM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_reconfig())?;
-
-        Ok(network.into_reconfig())
+    if *header.digest() != digest {
+        return Err!(IngestionError::DigestDoesNotMatch(digest, header.digest().clone()));
     }
 
-    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &RM::Message, buf: &Buf) -> Result<()> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!( "Could not find public key for peer"))?;
+    let node_info = network_info.get_node_info(&header.from());
 
-        let sig = header.signature();
+    let pub_key = node_info.as_ref().map(NodeInfo::public_key);
 
-        let digest = digest_message(buf.clone())?;
-
-        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
-
-        RM::verify_message_internal::<NI, Self>(info_provider, header, msg)
-    }
-}
-
-pub struct DefaultProtocolSignatureVerifier<RM: Serializable, PM: Serializable, NI: NetworkInformationProvider>(Arc<NI>, PhantomData<(RM, PM)>);
-
-impl<RM, PM, NI> NetworkMessageSignatureVerifier<PM, NI> for DefaultProtocolSignatureVerifier<RM, PM, NI>
-    where RM: Serializable, PM: Serializable, NI: NetworkInformationProvider + 'static {
-    fn verify_signature(info_provider: &Arc<NI>, header: &Header, msg: PM::Message) -> Result<PM::Message> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
-
-        let sig = header.signature();
-
-        let network = NetworkMessageKind::<RM, PM>::from_system(msg);
-
-        let (buf, digest) = cpu_workers::serialize_digest_no_threadpool(&network)?;
-
-        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
-
-        PM::verify_message_internal::<NI, Self>(info_provider, header, network.deref_system())?;
-
-        Ok(network.into_system())
-    }
-
-    fn verify_signature_with_buf(info_provider: &Arc<NI>, header: &Header, msg: &PM::Message, buf: &Buf) -> Result<()> {
-        let key = info_provider.get_public_key(&header.from()).ok_or(anyhow!("Could not find public key for peer"))?;
-
-        let sig = header.signature();
-
-        let digest = digest_message(buf.clone())?;
+    if let Some(key) = pub_key {
+        verify_validity(header, message, true, Some(&key))?;
         
-        verify_parts(&key, sig, header.from().0 as u32, header.to().0 as u32, header.nonce(), digest.as_ref())?;
-        
-        PM::verify_message_internal::<NI, Self>(info_provider, header, msg)
+        Ok(())
+    } else {
+        Err!(IngestionError::NodeNotKnown(header.from()))
     }
 }
 
-#[deprecated(since = "0.1.0", note = "please use `ReconfigurableNetworkNode` instead")]
-pub struct NodePKShared {
-    my_key: Arc<KeyPair>,
-    peer_keys: IntMap<PublicKey>,
-}
-
-impl NodePKShared {
-    pub fn from_config(config: PKConfig) -> Arc<Self> {
-        Arc::new(Self {
-            my_key: Arc::new(config.sk),
-            peer_keys: config.pk,
-        })
-    }
-
-    pub fn new(my_key: KeyPair, peer_keys: IntMap<PublicKey>) -> Self {
-        Self {
-            my_key: Arc::new(my_key),
-            peer_keys,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct NodePKCrypto {
-    pk_shared: Arc<NodePKShared>,
-}
-
-impl NodePKCrypto {
-    pub fn new(pk_shared: Arc<NodePKShared>) -> Self {
-        Self { pk_shared }
-    }
-
-    pub fn my_key(&self) -> &Arc<KeyPair> {
-        &self.pk_shared.my_key
-    }
-}
 
 fn digest_parts(from: u32, to: u32, nonce: u64, payload: &[u8]) -> Digest {
     let mut ctx = Context::new();
@@ -186,7 +107,18 @@ pub(crate) fn verify_parts(
     to: u32,
     nonce: u64,
     payload_digest: &[u8],
-) -> Result<()> {
+) -> Result<(), VerifyError> {
     let digest = digest_parts(from, to, nonce, payload_digest);
     pk.verify(digest.as_ref(), sig)
+}
+
+/// The error type for ingestion of messages
+#[derive(Error, Debug)]
+pub enum IngestionError {
+    #[error("The digest of the message {0:?} does not match the digest in the header {1:?}")]
+    DigestDoesNotMatch(Digest, Digest),
+    #[error("We do not know the node {0:?} (No Public key available)")]
+    NodeNotKnown(NodeId),
+    #[error("The message we have received has an invalid signature {0:?}")]
+    InvalidSignature(#[from] MessageErrors),
 }

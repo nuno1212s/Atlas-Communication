@@ -1,36 +1,30 @@
-//! This module contains types associated with messages traded
-//! between the system processes.
-
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::Write;
 use std::mem::MaybeUninit;
-use std::ops::Deref;
 use bytes::Bytes;
 use futures::{AsyncWrite, AsyncWriteExt};
-
-#[cfg(feature = "serialize_serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use atlas_common::error::*;
-
-use atlas_common::crypto::hash::{Context, Digest};
-use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature};
+use atlas_common::crypto::hash::Digest;
+use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
 use atlas_common::Err;
+use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use atlas_common::ordering::{Orderable, SeqNo};
+use crate::lookup_table::MessageModule;
+use crate::message_signing::IngestionError;
 
-use crate::serialize::{Buf, Serializable};
+/// The buffer type used to serialize messages into.
+pub type Buf = Bytes;
 
-// convenience type
-pub type StoredSerializedNetworkMessage<RM, PM> = StoredMessage<SerializedMessage<NetworkMessageKind<RM, PM>>>;
+pub type NetworkSerializedMessage = WireMessage;
 
-pub type StoredSerializedProtocolMessage<M> = StoredMessage<SerializedMessage<M>>;
+pub type StoredSerializedMessage<M> = StoredMessage<SerializedMessage<M>>;
 
 pub struct SerializedMessage<M> {
-    original: M,
-    raw: Buf,
+    pub(crate) original: M,
+    pub(crate) raw: Buf,
 }
 
 impl<M> SerializedMessage<M> {
@@ -51,13 +45,14 @@ impl<M> SerializedMessage<M> {
     }
 }
 
+
 /// Contains a system message as well as its respective header.
 /// Convenience type to allow to store messages more directly, instead of having
 /// the entire network message wrapper (with type of message, etc)
 #[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
 pub struct StoredMessage<M> {
-    header: Header,
-    message: M,
+    pub(crate) header: Header,
+    pub(crate) message: M,
 }
 
 impl<M> StoredMessage<M> {
@@ -97,194 +92,6 @@ impl<M> Clone for StoredMessage<M> where M: Clone {
 impl<M> Debug for StoredMessage<M> where M: Debug {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "StoredMessage {{ header: {:?}, message: {:?} }}", self.header, self.message)
-    }
-}
-
-///
-/// The messages that are going to be sent over the network
-#[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-pub struct NetworkMessage<RM, PM> where RM: Serializable, PM: Serializable {
-    pub header: Header,
-    pub message: NetworkMessageKind<RM, PM>,
-}
-
-impl<RM, PM> NetworkMessage<RM, PM> where RM: Serializable, PM: Serializable {
-    pub fn new(header: Header, message: NetworkMessageKind<RM, PM>) -> Self {
-        Self { header, message }
-    }
-
-    pub fn into_inner(self) -> (Header, NetworkMessageKind<RM, PM>) {
-        (self.header, self.message)
-    }
-}
-
-impl<RM, PM> From<(Header, NetworkMessageKind<RM, PM>)> for NetworkMessage<RM, PM>
-    where RM: Serializable,
-          PM: Serializable {
-    fn from(value: (Header, NetworkMessageKind<RM, PM>)) -> Self {
-        NetworkMessage { header: value.0, message: value.1 }
-    }
-}
-
-/// The type of network message you want to send
-/// To initialize a System message, you should use the [`From<PM::Message>`] implementation
-/// that is available.
-#[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-pub enum NetworkMessageKind<RM, PM> where PM: Serializable, RM: Serializable {
-    ReconfigurationMessage(Reconfig<RM::Message>),
-    Ping(PingMessage),
-    System(System<PM::Message>),
-}
-
-impl<RM, PM> Clone for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
-    fn clone(&self) -> Self {
-        match self {
-            NetworkMessageKind::Ping(ping) => { NetworkMessageKind::Ping(ping.clone()) }
-            NetworkMessageKind::System(sys) => { NetworkMessageKind::System(sys.clone()) }
-            NetworkMessageKind::ReconfigurationMessage(reconfig) => { NetworkMessageKind::ReconfigurationMessage(reconfig.clone()) }
-        }
-    }
-}
-
-impl<RM, PM> NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
-    pub fn from_system(msg: PM::Message) -> Self {
-        NetworkMessageKind::System(System::from(msg))
-    }
-
-    pub fn from_reconfig(msg: RM::Message) -> Self {
-        NetworkMessageKind::ReconfigurationMessage(Reconfig::from(msg))
-    }
-
-    pub fn deref_system(&self) -> &PM::Message {
-        match self {
-            NetworkMessageKind::System(sys) => {
-                sys
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-
-    pub fn deref_reconfig(&self) -> &RM::Message {
-        match self {
-            NetworkMessageKind::ReconfigurationMessage(reconfig) => {
-                reconfig
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-
-    pub fn into(self) -> PM::Message {
-        match self {
-            NetworkMessageKind::System(sys_msg) => {
-                sys_msg.inner
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-
-    pub fn into_system(self) -> PM::Message {
-        match self {
-            NetworkMessageKind::System(sys_msg) => {
-                sys_msg.inner
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-
-    pub fn into_reconfig(self) -> RM::Message {
-        match self {
-            NetworkMessageKind::ReconfigurationMessage(reconfig_msg) => {
-                reconfig_msg.inner
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-    }
-}
-
-impl<RM, PM> From<System<PM::Message>> for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
-    fn from(value: System<PM::Message>) -> Self {
-        NetworkMessageKind::System(value)
-    }
-}
-
-impl<RM, PM> Debug for NetworkMessageKind<RM, PM> where RM: Serializable, PM: Serializable {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NetworkMessageKind::Ping(ping) => {
-                write!(f, "Ping message Request ({})", ping.is_request())
-            }
-            NetworkMessageKind::System(_) => {
-                write!(f, "System message")
-            }
-            NetworkMessageKind::ReconfigurationMessage(_) => {
-                write!(f, "Reconfiguration message")
-            }
-        }
-    }
-}
-
-/// A system message, relating to the protocol that is utilizing this communication framework
-#[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-#[derive(Clone)]
-pub struct System<M: Clone> {
-    inner: M,
-}
-
-impl<M> System<M> where M: Clone {
-    pub fn into(self) -> M {
-        self.inner
-    }
-}
-
-impl<M: Clone> Deref for System<M> {
-    type Target = M;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<M: Clone> From<M> for System<M> {
-    fn from(value: M) -> Self {
-        System { inner: value }
-    }
-}
-
-
-/// A system message, relating to the protocol that is utilizing this communication framework
-#[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-#[derive(Clone)]
-pub struct Reconfig<M: Clone> {
-    inner: M,
-}
-
-impl<M> Reconfig<M> where M: Clone {
-    pub fn into(self) -> M {
-        self.inner
-    }
-}
-
-impl<M: Clone> Deref for Reconfig<M> {
-    type Target = M;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<M: Clone> From<M> for Reconfig<M> {
-    fn from(value: M) -> Self {
-        Self { inner: value }
     }
 }
 
@@ -343,46 +150,13 @@ impl<'de> serde::Deserialize<'de> for Header {
 
 /// A message to be sent over the wire. The payload should be a serialized
 /// `SystemMessage`, for correctness.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WireMessage {
     pub(crate) header: Header,
+    pub(crate) message_mod: MessageModule,
     pub(crate) payload: Bytes,
 }
 
-/// A generic `WireMessage`, for different `AsRef<[u8]>` types.
-#[derive(Clone, Debug)]
-pub struct OwnedWireMessage<T> {
-    pub(crate) header: Header,
-    pub(crate) payload: T,
-}
-
-///
-/// Ping messages
-/// @{
-
-///Contains a boolean representing if this is a request.
-///If it is a ping request, should be set to true,
-///ping responses should be false
-///
-#[cfg_attr(feature = "serialize_serde", derive(Serialize, Deserialize))]
-#[derive(Clone)]
-pub struct PingMessage {
-    request: bool,
-}
-
-impl PingMessage {
-    pub fn new(is_request: bool) -> Self {
-        Self {
-            request: is_request
-        }
-    }
-
-    pub fn is_request(&self) -> bool {
-        self.request
-    }
-}
-
-///}@
 
 // FIXME: perhaps use references for serializing and deserializing,
 // to save a stack allocation? probably overkill
@@ -431,7 +205,7 @@ impl Header {
     /// Deserialize a `Header` from a byte buffer of appropriate size.
     pub fn deserialize_from(buf: &[u8]) -> Result<Self> {
         if buf.len() < Self::LENGTH {
-            return Err!(MessageErrors::InvalidSizeHeader(buf.len()))
+            return Err!(MessageErrors::InvalidSizeHeader(buf.len()));
         }
         Ok(unsafe { Self::deserialize_from_unchecked(buf) })
     }
@@ -482,63 +256,25 @@ impl Header {
     }
 }
 
-/*
-impl From<WireMessage<'_>> for OwnedWireMessage<Box<[u8]>> {
-    fn from(wm: WireMessage<'_>) -> Self {
-        OwnedWireMessage {
-            header: wm.header,
-            payload: Vec::from(wm.payload).into_boxed_slice(),
-        }
-    }
-}
-
-impl From<WireMessage<'_>> for OwnedWireMessage<Vec<u8>> {
-    fn from(wm: WireMessage<'_>) -> Self {
-        OwnedWireMessage {
-            header: wm.header,
-            payload: Vec::from(wm.payload),
-        }
-    }
-}
-
-impl<T: Array<Item=u8>> From<WireMessage<'_>> for OwnedWireMessage<SmallVec<T>> {
-    fn from(wm: WireMessage<'_>) -> Self {
-        OwnedWireMessage {
-            header: wm.header,
-            payload: SmallVec::from(wm.payload),
-        }
-    }
-}
-
-impl<T: AsRef<[u8]>> OwnedWireMessage<T> {
-    /// Returns a reference to a `WireMessage`.
-    pub fn borrowed<'a>(&'a self) -> WireMessage<'a> {
-        WireMessage {
-            header: self.header,
-            payload: self.payload,
-        }
-    }
-}
-*/
 
 impl WireMessage {
     /// The current version of the wire protocol.
     pub const CURRENT_VERSION: u32 = 0;
 
     /// Wraps a `Header` and a byte array payload into a `WireMessage`.
-    pub fn from_parts(header: Header, payload: Buf) -> Result<Self> {
-        let wm = Self { header, payload };
-        if !wm.is_valid(None, true) {
-            return Err!(MessageErrors::InvalidWireMessage);
-        }
+    pub fn from_parts(header: Header, message_mod: MessageModule, payload: Buf) -> std::result::Result<Self, MessageErrors> {
+        let wm = Self { header, message_mod, payload };
+
+        wm.is_valid(None, true)?;
+
         Ok(wm)
     }
 
-    pub fn from_header(header: Header) -> Result<Self> {
-        let wm = Self { header, payload: Buf::new() };
-        if !wm.is_valid(None, false) {
-            return Err!(MessageErrors::InvalidWireMessage);
-        }
+    pub fn from_header(header: Header, message_mod: MessageModule) -> std::result::Result<Self, MessageErrors> {
+        let wm = Self { header, message_mod, payload: Buf::new() };
+        
+        wm.is_valid(None, false)?;
+        
         Ok(wm)
     }
 
@@ -546,6 +282,7 @@ impl WireMessage {
     pub fn new(
         from: NodeId,
         to: NodeId,
+        message_mod: MessageModule,
         payload: Buf,
         nonce: u64,
         digest: Option<Digest>,
@@ -584,13 +321,21 @@ impl WireMessage {
             to,
         };
 
-        Self { header, payload }
+        Self {
+            header,
+            message_mod,
+            payload,
+        }
     }
 
     /// Retrieve the inner `Header` and payload byte buffer stored
     /// inside the `WireMessage`.
-    pub fn into_inner(self) -> (Header, Buf) {
-        (self.header, self.payload)
+    pub fn into_inner(self) -> (Header, MessageModule, Buf) {
+        (self.header, self.message_mod, self.payload)
+    }
+
+    pub fn message_module(&self) -> &MessageModule {
+        &self.message_mod
     }
 
     /// Returns a reference to the `Header` of the `WireMessage`.
@@ -603,29 +348,15 @@ impl WireMessage {
         &self.payload
     }
 
+    /// Returns a reference to the payload bytes of the `WireMessage`.
+    pub fn payload_buf(&self) -> &Buf {
+        &self.payload
+    }
+
     /// Checks for the correctness of the `WireMessage`. This implies
     /// checking its signature, if a `PublicKey` is provided.
-    pub fn is_valid(&self, public_key: Option<&PublicKey>, check_payload_len: bool) -> bool {
-        let preliminary_check_failed =
-            self.header.version != WireMessage::CURRENT_VERSION
-                || (check_payload_len && self.header.length != self.payload.len() as u64);
-
-        if preliminary_check_failed {
-            return false;
-        }
-
-        public_key
-            .map(|pk| {
-                crate::message_signing::verify_parts(
-                    pk,
-                    self.header.signature(),
-                    self.header.from,
-                    self.header.to,
-                    self.header.nonce,
-                    &self.header.digest[..],
-                ).is_ok()
-            })
-            .unwrap_or(true)
+    pub fn is_valid(&self, public_key: Option<&PublicKey>, check_payload_len: bool) -> std::result::Result<(), MessageErrors> {
+        verify_validity(&self.header, &self.payload, check_payload_len, public_key)
     }
 
     /// Serialize a `WireMessage` into an async writer.
@@ -646,39 +377,47 @@ impl WireMessage {
         Ok(())
     }
 
-    /// Serialize a `WireMessage` into an async writer.
+    /// Serialize a `WireMessage` into a sync writer.
     pub fn write_to_sync<W: Write>(&self, mut w: W, flush: bool) -> io::Result<()> {
         let mut buf = [0; Header::LENGTH];
         self.header.serialize_into(&mut buf[..]).unwrap();
 
-        w.write_all(&buf[..]);
+        w.write_all(&buf[..])?;
 
         if self.payload.len() > 0 {
-            w.write_all(&self.payload[..]);
+            w.write_all(&self.payload[..])?;
         }
 
         if flush {
-            w.flush();
+            w.flush()?;
         }
 
         Ok(())
     }
+}
 
-    /// Converts this `WireMessage` into an owned one.
-    pub fn with_owned_buffer<T: AsRef<[u8]>>(self, buf: T) -> Option<OwnedWireMessage<T>> {
-        let buf_p = buf.as_ref()[0] as *const u8;
-        let payload_p = &self.payload[0] as *const u8;
+pub fn verify_validity(header: &Header, message: &Buf, check_payload_len: bool, public_key: Option<&PublicKey>) -> std::result::Result<(), MessageErrors> {
+    let preliminary_check_failed =
+        header.version != WireMessage::CURRENT_VERSION
+            || (check_payload_len && header.length != message.len() as u64);
 
-        // both point to the same memory region, safe
-        if buf_p == payload_p {
-            Some(OwnedWireMessage {
-                header: self.header,
-                payload: buf,
-            })
-        } else {
-            None
-        }
+    if preliminary_check_failed {
+        return Err!(MessageErrors::InvalidWireMessage);
     }
+
+    public_key
+        .map(|pk| {
+            crate::message_signing::verify_parts(
+                pk,
+                header.signature(),
+                header.from,
+                header.to,
+                header.nonce,
+                &header.digest[..],
+            )
+        })
+        .unwrap_or(Ok(()))
+        .map_err(|e| e.into())
 }
 
 impl Debug for Header {
@@ -701,35 +440,10 @@ impl Debug for Header {
 pub enum MessageErrors {
     #[error("The wire message is not valid")]
     InvalidWireMessage,
+    #[error("Verification error {0:?}")]
+    VerificationError(#[from] VerifyError),
     #[error("The header has an invalid size {0}")]
     InvalidSizeHeader(usize),
     #[error("Destination header is too small {0}")]
     InvalidSizeSerDest(usize),
-}
-
-#[cfg(test)]
-mod tests {
-    use atlas_common::crypto::hash::Digest;
-    use atlas_common::crypto::signature::Signature;
-    use crate::message::{WireMessage, Header};
-
-    #[test]
-    fn test_header_serialize() {
-        let old_header = Header {
-            _align: 0,
-            version: WireMessage::CURRENT_VERSION,
-            signature: [0; Signature::LENGTH],
-            digest: [0; Digest::LENGTH],
-            nonce: 0,
-            from: 0,
-            to: 3,
-            length: 0,
-        };
-        let mut buf = [0; Header::LENGTH];
-        old_header.serialize_into(&mut buf[..])
-            .expect("Serialize failed");
-        let new_header = Header::deserialize_from(&buf[..])
-            .expect("Deserialize failed");
-        assert_eq!(old_header, new_header);
-    }
 }
