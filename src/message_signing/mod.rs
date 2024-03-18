@@ -43,10 +43,7 @@ pub(crate) fn verify_ser_message_validity(
     let digest = serialization::digest_message(message);
 
     if *header.digest() != digest {
-        return Err!(IngestionError::DigestDoesNotMatch(
-            digest,
-            *header.digest()
-        ));
+        return Err!(IngestionError::DigestDoesNotMatch(digest, *header.digest()));
     }
 
     let node_info = network_info.get_node_info(&header.from());

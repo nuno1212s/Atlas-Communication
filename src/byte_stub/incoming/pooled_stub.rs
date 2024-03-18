@@ -1,7 +1,7 @@
 use crate::config::ClientPoolConfig;
-use crate::message::{StoredMessage};
+use crate::message::StoredMessage;
 use crate::metric::CLIENT_POOL_COLLECT_TIME_ID;
-use crate::stub::{BatchedModuleIncomingStub};
+use crate::stub::BatchedModuleIncomingStub;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::node_id::NodeId;
 use atlas_common::Err;
@@ -234,8 +234,6 @@ where
             finish_execution: AtomicBool::new(false),
             owner,
         };
-
-        
 
         Arc::new(result)
     }
@@ -480,9 +478,7 @@ impl<T> ConnectedClientPeer<T> {
                 self.peer_id
             );
 
-            Err!(ClientPoolError::PooledConnectionClosed(
-                self.peer_id
-            ))
+            Err!(ClientPoolError::PooledConnectionClosed(self.peer_id))
         } else {
             sender_guard.push(msg);
 

@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Context};
-use atlas_common::{channel, error};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, OneShotRx};
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::peer_addr::PeerAddr;
+use atlas_common::{channel, error};
 use atlas_communication::byte_stub::connections::NetworkConnectionController;
 use atlas_communication::byte_stub::incoming::PeerIncomingConnection;
 use atlas_communication::byte_stub::{
@@ -11,14 +11,12 @@ use atlas_communication::byte_stub::{
 };
 use atlas_communication::lookup_table::EnumLookupTable;
 use atlas_communication::message::{Header, WireMessage};
-use atlas_communication::reconfiguration::{
-    NetworkInformationProvider,
-};
+use atlas_communication::reconfiguration;
+use atlas_communication::reconfiguration::NetworkInformationProvider;
 use atlas_communication::serialization::{InternalMessageVerifier, Serializable};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use atlas_communication::reconfiguration;
 
 #[derive(Clone)]
 pub struct NodeInfo<K> {
@@ -41,7 +39,9 @@ impl NetworkInformationProvider for MockNetworkInfo {
     }
 
     fn get_node_info(&self, node: &NodeId) -> Option<reconfiguration::NodeInfo> {
-        self.other_nodes.get(node).map(|info| info.node_info.clone())
+        self.other_nodes
+            .get(node)
+            .map(|info| info.node_info.clone())
     }
 }
 
@@ -60,11 +60,15 @@ impl MockNetworkInfoFactory {
             let key = KeyPair::from_bytes(buf.as_slice())?;
 
             let info = NodeInfo {
-                node_info: reconfiguration::NodeInfo::new(NodeId::from(node_id as u32), NodeType::Replica, PublicKey::from(key.public_key()),
-                                                          PeerAddr::new(
-                                                              format!("127.0.0.1:{}", Self::PORT + (node_id as u32)).parse()?,
-                                                              String::from("localhost"),
-                                                          )),
+                node_info: reconfiguration::NodeInfo::new(
+                    NodeId::from(node_id as u32),
+                    NodeType::Replica,
+                    PublicKey::from(key.public_key()),
+                    PeerAddr::new(
+                        format!("127.0.0.1:{}", Self::PORT + (node_id as u32)).parse()?,
+                        String::from("localhost"),
+                    ),
+                ),
                 key: Arc::new(key),
             };
 
@@ -124,8 +128,8 @@ impl InternalMessageVerifier<MockMessage> for MockVerifier {
         _: &Header,
         _: &MockMessage,
     ) -> atlas_common::error::Result<()>
-        where
-            NI: NetworkInformationProvider + 'static,
+    where
+        NI: NetworkInformationProvider + 'static,
     {
         Ok(())
     }
@@ -156,7 +160,7 @@ type PeerCNNMngmt = PeerConnectionManager<
 >;
 
 type PeerInnCnn =
-PeerIncomingConnection<MockProtocol, MockProtocol, MockProtocol, MockProtocol, LookupTable>;
+    PeerIncomingConnection<MockProtocol, MockProtocol, MockProtocol, MockProtocol, LookupTable>;
 
 /// The byte level mock controller
 /// handles faking the byte level network by utilizing channels
@@ -177,18 +181,18 @@ impl ByteNetworkController for MockByteController {
 }
 
 impl<NI> ByteNetworkControllerInit<NI, PeerCNNMngmt, MockByteStub, PeerInnCnn>
-for MockByteController
-    where
-        NI: NetworkInformationProvider,
+    for MockByteController
+where
+    NI: NetworkInformationProvider,
 {
     fn initialize_controller(
         _network_info: Arc<NI>,
         _config: MockByteManagementFactory,
         _stub_controllers: PeerCNNMngmt,
     ) -> atlas_common::error::Result<Self>
-        where
-            Self: Sized,
-            NI: NetworkInformationProvider,
+    where
+        Self: Sized,
+        NI: NetworkInformationProvider,
     {
         todo!()
     }
@@ -277,8 +281,6 @@ impl MockByteManagementFactory {
 
 #[cfg(test)]
 mod conn_testing {
-    
-    
 
     fn setup_nodes(_node_count: u32) {}
 

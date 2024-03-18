@@ -282,11 +282,7 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
         if let Some(send_tos) = send_tos {
             send_tos.into_iter().for_each(|send_to| {
                 if send_to.authenticated_state() {
-                    send_to.value(Either::Right((
-                        message_module.clone(),
-                        buf.clone(),
-                        digest,
-                    )));
+                    send_to.value(Either::Right((message_module.clone(), buf.clone(), digest)));
                 } else {
                     match &message_module {
                         MessageModule::Reconfiguration => {

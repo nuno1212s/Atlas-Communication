@@ -5,9 +5,7 @@ use std::time::Duration;
 
 use crate::byte_stub::connections::NetworkConnectionController;
 
-use crate::byte_stub::{
-    ByteNetworkStub, PeerConnectionManager, StubEndpoint,
-};
+use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager, StubEndpoint};
 use crate::lookup_table::{EnumLookupTable, MessageModule};
 use atlas_common::crypto::hash::Digest;
 use atlas_common::error::*;

@@ -23,7 +23,7 @@ use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{LookupTable, MessageModule};
 use crate::message::{StoredMessage, WireMessage};
-use crate::reconfiguration::{NetworkInformationProvider};
+use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 
@@ -393,8 +393,10 @@ where
         _node_type: NodeType,
         _key: PublicKey,
     ) -> Result<()> {
-        if let Some(c) = self.connections().get_connection(node) { c.authenticated
-                .store(true, std::sync::atomic::Ordering::Relaxed) }
+        if let Some(c) = self.connections().get_connection(node) {
+            c.authenticated
+                .store(true, std::sync::atomic::Ordering::Relaxed)
+        }
 
         Ok(())
     }
