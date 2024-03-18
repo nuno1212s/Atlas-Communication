@@ -36,15 +36,13 @@ where
                 return Err!(IngestMessageError::UnAuthenticatedMessage(module));
             }
         }
-    } else {
-        if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
-            warn!(
-                "Failed to verify message validity for message module: {:?}",
-                module
-            );
+    } else if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
+        warn!(
+            "Failed to verify message validity for message module: {:?}",
+            module
+        );
 
-            return Err!(e);
-        }
+        return Err!(e);
     }
 
     // FIXME: Is this part with the lookup table even necessary? We just directly type in the types anyways so I think it is redundant.

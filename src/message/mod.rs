@@ -1,5 +1,5 @@
 use crate::lookup_table::MessageModule;
-use crate::message_signing::IngestionError;
+
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
 use atlas_common::error::*;
@@ -91,7 +91,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            header: self.header.clone(),
+            header: self.header,
             message: self.message.clone(),
         }
     }
@@ -188,7 +188,7 @@ impl Header {
             self.length = self.length.to_le();
         }
         let hdr: [u8; Self::LENGTH] = std::mem::transmute(self);
-        (&mut buf[..Self::LENGTH]).copy_from_slice(&hdr[..]);
+        buf[..Self::LENGTH].copy_from_slice(&hdr[..]);
     }
 
     /// Serialize a `Header` into a byte buffer of appropriate size.
@@ -196,7 +196,8 @@ impl Header {
         if buf.len() < Self::LENGTH {
             return Err!(MessageErrors::InvalidSizeSerDest(buf.len()));
         }
-        Ok(unsafe { self.serialize_into_unchecked(buf) })
+        unsafe { self.serialize_into_unchecked(buf) };
+        Ok(())
     }
 
     unsafe fn deserialize_from_unchecked(buf: &[u8]) -> Self {
@@ -204,7 +205,7 @@ impl Header {
             let hdr = MaybeUninit::uninit();
             hdr.assume_init()
         };
-        (&mut hdr[..]).copy_from_slice(&buf[..Self::LENGTH]);
+        hdr[..].copy_from_slice(&buf[..Self::LENGTH]);
         #[cfg(target_endian = "big")]
         {
             hdr.version = hdr.version.to_be();
@@ -398,7 +399,7 @@ impl WireMessage {
 
         w.write_all(&buf[..]).await?;
 
-        if self.payload.len() > 0 {
+        if !self.payload.is_empty() {
             w.write_all(&self.payload[..]).await?;
         }
 
@@ -416,7 +417,7 @@ impl WireMessage {
 
         w.write_all(&buf[..])?;
 
-        if self.payload.len() > 0 {
+        if !self.payload.is_empty() {
             w.write_all(&self.payload[..])?;
         }
 

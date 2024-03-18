@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use atlas_common::channel;
+use atlas_common::{channel, error};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, OneShotRx};
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::{NodeId, NodeType};
@@ -7,24 +7,22 @@ use atlas_common::peer_addr::PeerAddr;
 use atlas_communication::byte_stub::connections::NetworkConnectionController;
 use atlas_communication::byte_stub::incoming::PeerIncomingConnection;
 use atlas_communication::byte_stub::{
-    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, NodeIncomingStub,
-    NodeStubController, PeerConnectionManager,
+    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager,
 };
 use atlas_communication::lookup_table::EnumLookupTable;
-use atlas_communication::message::{Header, StoredMessage, WireMessage};
+use atlas_communication::message::{Header, WireMessage};
 use atlas_communication::reconfiguration::{
-    NetworkInformationProvider, ReconfigurationMessageHandler,
+    NetworkInformationProvider,
 };
 use atlas_communication::serialization::{InternalMessageVerifier, Serializable};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use atlas_communication::reconfiguration;
 
 #[derive(Clone)]
 pub struct NodeInfo<K> {
-    id: NodeId,
-    addr: PeerAddr,
-    node_type: NodeType,
+    node_info: reconfiguration::NodeInfo,
     key: K,
 }
 
@@ -34,32 +32,16 @@ pub struct MockNetworkInfo {
 }
 
 impl NetworkInformationProvider for MockNetworkInfo {
-    fn get_own_id(&self) -> NodeId {
-        self.own_node.id
-    }
-
-    fn get_own_addr(&self) -> PeerAddr {
-        self.own_node.addr.clone()
+    fn own_node_info(&self) -> &reconfiguration::NodeInfo {
+        &self.own_node.node_info
     }
 
     fn get_key_pair(&self) -> &Arc<KeyPair> {
         &self.own_node.key
     }
 
-    fn get_own_node_type(&self) -> NodeType {
-        self.own_node.node_type
-    }
-
-    fn get_node_type(&self, node: &NodeId) -> Option<NodeType> {
-        self.other_nodes.get(node).map(|info| info.node_type)
-    }
-
-    fn get_public_key(&self, node: &NodeId) -> Option<PublicKey> {
-        self.other_nodes.get(node).map(|info| info.key.clone())
-    }
-
-    fn get_addr_for_node(&self, node: &NodeId) -> Option<PeerAddr> {
-        self.other_nodes.get(node).map(|info| info.addr.clone())
+    fn get_node_info(&self, node: &NodeId) -> Option<reconfiguration::NodeInfo> {
+        self.other_nodes.get(node).map(|info| info.node_info.clone())
     }
 }
 
@@ -78,16 +60,15 @@ impl MockNetworkInfoFactory {
             let key = KeyPair::from_bytes(buf.as_slice())?;
 
             let info = NodeInfo {
-                id: NodeId::from(node_id as u32),
-                addr: PeerAddr::new(
-                    format!("127.0.0.1:{}", Self::PORT + (node_id as u32)).parse()?,
-                    String::from("localhost"),
-                ),
-                node_type: NodeType::Replica,
+                node_info: reconfiguration::NodeInfo::new(NodeId::from(node_id as u32), NodeType::Replica, PublicKey::from(key.public_key()),
+                                                          PeerAddr::new(
+                                                              format!("127.0.0.1:{}", Self::PORT + (node_id as u32)).parse()?,
+                                                              String::from("localhost"),
+                                                          )),
                 key: Arc::new(key),
             };
 
-            map.insert(info.id.clone(), info);
+            map.insert(info.node_info.node_id(), info);
         }
 
         Ok(Self { nodes: map })
@@ -109,11 +90,9 @@ impl MockNetworkInfoFactory {
             .filter(|(id, _)| **id != node_id)
             .map(|(id, info)| {
                 (
-                    id.clone(),
+                    *id,
                     NodeInfo {
-                        id: info.id.clone(),
-                        addr: info.addr.clone(),
-                        node_type: info.node_type,
+                        node_info: info.node_info.clone(),
                         key: PublicKey::from(info.key.public_key()),
                     },
                 )
@@ -145,8 +124,8 @@ impl InternalMessageVerifier<MockMessage> for MockVerifier {
         _: &Header,
         _: &MockMessage,
     ) -> atlas_common::error::Result<()>
-    where
-        NI: NetworkInformationProvider + 'static,
+        where
+            NI: NetworkInformationProvider + 'static,
     {
         Ok(())
     }
@@ -167,6 +146,7 @@ impl ByteNetworkStub for MockByteStub {
 
 type LookupTable = EnumLookupTable<MockProtocol, MockProtocol, MockProtocol, MockProtocol>;
 type PeerCNNMngmt = PeerConnectionManager<
+    MockNetworkInfo,
     MockByteStub,
     MockProtocol,
     MockProtocol,
@@ -176,7 +156,7 @@ type PeerCNNMngmt = PeerConnectionManager<
 >;
 
 type PeerInnCnn =
-    PeerIncomingConnection<MockProtocol, MockProtocol, MockProtocol, MockProtocol, LookupTable>;
+PeerIncomingConnection<MockProtocol, MockProtocol, MockProtocol, MockProtocol, LookupTable>;
 
 /// The byte level mock controller
 /// handles faking the byte level network by utilizing channels
@@ -197,19 +177,18 @@ impl ByteNetworkController for MockByteController {
 }
 
 impl<NI> ByteNetworkControllerInit<NI, PeerCNNMngmt, MockByteStub, PeerInnCnn>
-    for MockByteController
-where
-    NI: NetworkInformationProvider,
+for MockByteController
+    where
+        NI: NetworkInformationProvider,
 {
     fn initialize_controller(
-        reconf: ReconfigurationMessageHandler,
-        network_info: Arc<NI>,
-        config: MockByteManagementFactory,
-        stub_controllers: PeerCNNMngmt,
+        _network_info: Arc<NI>,
+        _config: MockByteManagementFactory,
+        _stub_controllers: PeerCNNMngmt,
     ) -> atlas_common::error::Result<Self>
-    where
-        Self: Sized,
-        NI: NetworkInformationProvider,
+        where
+            Self: Sized,
+            NI: NetworkInformationProvider,
     {
         todo!()
     }
@@ -241,12 +220,12 @@ impl NetworkConnectionController for MockByteConnectionController {
 
     fn connect_to_node(
         self: &Arc<Self>,
-        node: NodeId,
-    ) -> Vec<OneShotRx<atlas_common::error::Result<()>>> {
+        _node: NodeId,
+    ) -> error::Result<Vec<OneShotRx<error::Result<()>>>> {
         todo!()
     }
 
-    fn disconnect_from_node(self: &Arc<Self>, node: &NodeId) -> atlas_common::error::Result<()> {
+    fn disconnect_from_node(self: &Arc<Self>, _node: &NodeId) -> atlas_common::error::Result<()> {
         todo!()
     }
 }
@@ -289,7 +268,7 @@ impl MockByteManagementFactory {
         }
     }
 
-    fn initialize_stub_for(&self, from: NodeId, to: NodeId) -> MockByteStub {
+    fn initialize_stub_for(&self, _from: NodeId, to: NodeId) -> MockByteStub {
         let (stub, _) = self.end_points.get(&to).unwrap();
 
         stub.clone()
@@ -298,10 +277,10 @@ impl MockByteManagementFactory {
 
 #[cfg(test)]
 mod conn_testing {
-    use atlas_communication::NetworkManagement;
-    use std::collections::BTreeMap;
+    
+    
 
-    fn setup_nodes(node_count: u32) -> () {}
+    fn setup_nodes(_node_count: u32) {}
 
     #[test]
     pub fn test_connection() {}

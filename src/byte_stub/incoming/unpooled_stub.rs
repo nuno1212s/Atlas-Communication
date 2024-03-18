@@ -31,7 +31,7 @@ impl<M> UnpooledStubManagement<M> {
         (Self { tx }, UnpooledStubRX { rx })
     }
 
-    pub fn gen_stub_stub_for_peer(&self, peer: NodeId) -> UnpooledStubTX<M> {
+    pub fn gen_stub_stub_for_peer(&self, _peer: NodeId) -> UnpooledStubTX<M> {
         UnpooledStubTX {
             tx: self.tx.clone(),
         }

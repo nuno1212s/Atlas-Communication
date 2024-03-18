@@ -1,6 +1,6 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-use std::thread::Thread;
+
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -21,9 +21,9 @@ use crate::byte_stub::incoming::{
 };
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
-use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
+use crate::lookup_table::{LookupTable, MessageModule};
 use crate::message::{StoredMessage, WireMessage};
-use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
+use crate::reconfiguration::{NetworkInformationProvider};
 use crate::serialization::Serializable;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 
@@ -260,7 +260,7 @@ where
             node_id: id,
             lookup_table,
             rng,
-            network_info: network_info,
+            network_info,
             controller: Arc::new(stub_controller),
             endpoints: Arc::new(endpoints),
             connections: Arc::new(active_conns),
@@ -390,13 +390,11 @@ where
     fn upgrade_connection_to_known(
         &self,
         node: &NodeId,
-        node_type: NodeType,
-        key: PublicKey,
+        _node_type: NodeType,
+        _key: PublicKey,
     ) -> Result<()> {
-        self.connections().get_connection(node).map(|c| {
-            c.authenticated
-                .store(true, std::sync::atomic::Ordering::Relaxed)
-        });
+        if let Some(c) = self.connections().get_connection(node) { c.authenticated
+                .store(true, std::sync::atomic::Ordering::Relaxed) }
 
         Ok(())
     }
@@ -501,7 +499,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            node_id: self.node_id.clone(),
+            node_id: self.node_id,
             lookup_table: self.lookup_table.clone(),
             rng: self.rng.clone(),
             network_info: self.network_info.clone(),

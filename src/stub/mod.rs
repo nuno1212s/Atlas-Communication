@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::byte_stub::connections::NetworkConnectionController;
-use crate::byte_stub::incoming::PeerIncomingConnection;
+
 use crate::byte_stub::{
-    ByteNetworkController, ByteNetworkStub, ModuleStubEndPoint, PeerConnectionManager, StubEndpoint,
+    ByteNetworkStub, PeerConnectionManager, StubEndpoint,
 };
 use crate::lookup_table::{EnumLookupTable, MessageModule};
 use atlas_common::crypto::hash::Digest;

@@ -1,6 +1,6 @@
 use crate::byte_stub::incoming::pooled_stub::{ConnectedPeersGroup, PooledStubOutput};
 use crate::byte_stub::{
-    from_arr, ByteNetworkStub, ModuleStubEndPoint, NodeIncomingStub, NodeStubController,
+    from_arr, ModuleStubEndPoint, NodeIncomingStub,
     PeerStubEndpoints, StubEndpoint,
 };
 use crate::config::ClientPoolConfig;
@@ -9,14 +9,14 @@ use crate::message::{Header, StoredMessage, WireMessage};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 use crate::{lookup_table, message_ingestion};
-use anyhow::anyhow;
+
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::{channel, quiet_unwrap};
 use enum_map::EnumMap;
 use log::error;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use strum::IntoEnumIterator;
 
 pub(crate) mod pooled_stub;

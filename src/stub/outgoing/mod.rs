@@ -30,7 +30,7 @@ where
     CN: ByteNetworkStub + 'static,
     BNC: NetworkConnectionController,
 {
-    fn send(&self, message: R::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send(&self, message: R::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
         send_message_to_targets(
@@ -44,7 +44,7 @@ where
         Ok(())
     }
 
-    fn send_signed(&self, message: R::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send_signed(&self, message: R::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Reconfiguration(message);
 
         send_message_to_targets(
@@ -140,7 +140,7 @@ where
     CN: ByteNetworkStub + 'static,
     BNC: NetworkConnectionController,
 {
-    fn send(&self, message: O::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send(&self, message: O::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
         send_message_to_targets(
@@ -154,7 +154,7 @@ where
         Ok(())
     }
 
-    fn send_signed(&self, message: O::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send_signed(&self, message: O::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Protocol(message);
 
         send_message_to_targets(
@@ -250,7 +250,7 @@ where
     CN: ByteNetworkStub + 'static,
     BNC: NetworkConnectionController,
 {
-    fn send(&self, message: S::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send(&self, message: S::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
         send_message_to_targets(
@@ -264,7 +264,7 @@ where
         Ok(())
     }
 
-    fn send_signed(&self, message: S::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send_signed(&self, message: S::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::StateProtocol(message);
 
         send_message_to_targets(
@@ -360,7 +360,7 @@ where
     CN: ByteNetworkStub + 'static,
     BNC: NetworkConnectionController,
 {
-    fn send(&self, message: A::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send(&self, message: A::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
         send_message_to_targets(
@@ -374,7 +374,7 @@ where
         Ok(())
     }
 
-    fn send_signed(&self, message: A::Message, target: NodeId, flush: bool) -> Result<()> {
+    fn send_signed(&self, message: A::Message, target: NodeId, _flush: bool) -> Result<()> {
         let wrapped_message = ModMessageWrapped::Application(message);
 
         send_message_to_targets(

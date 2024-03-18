@@ -1,6 +1,6 @@
 use crate::byte_stub::incoming;
 use crate::lookup_table::{MessageModule, ModMessageWrapped, PeerStubLookupTable};
-use crate::message::{Header, StoredMessage, StoredSerializedMessage};
+use crate::message::{Header, StoredMessage};
 use crate::serialization::Serializable;
 
 pub struct LoopbackOutgoingStub<R, O, S, A>

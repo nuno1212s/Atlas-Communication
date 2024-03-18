@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::KeyPair;
-use atlas_common::error::*;
+
 use atlas_common::node_id::NodeId;
 use atlas_common::prng::ThreadSafePrng;
 use atlas_common::quiet_unwrap;
@@ -156,10 +156,7 @@ where
     ) where
         CN: ByteNetworkStub,
     {
-        let key_pair = match &self.shared {
-            None => None,
-            Some(key_pair) => Some(&**key_pair),
-        };
+        let key_pair = self.shared.as_deref();
 
         match (self.peer, msg) {
             (PeerOutgoingConnection::LoopbackStub(stub), Either::Left((msg, buf, digest))) => {
@@ -245,7 +242,7 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
     L: LookupTable<R, O, S, A>,
     NI: NetworkInformationProvider,
 {
-    if let None = &shared {
+    if shared.is_none() {
         trace!(
             "Sending message from module {:?} without authentication",
             message.get_module()
@@ -279,16 +276,16 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
         let buf = Bytes::from(buf);
 
         if let Some(send_to_me) = send_to_me {
-            send_to_me.value(Either::Left((message, buf.clone(), digest.clone())));
+            send_to_me.value(Either::Left((message, buf.clone(), digest)));
         }
 
-        if let Some(mut send_tos) = send_tos {
+        if let Some(send_tos) = send_tos {
             send_tos.into_iter().for_each(|send_to| {
                 if send_to.authenticated_state() {
                     send_to.value(Either::Right((
                         message_module.clone(),
                         buf.clone(),
-                        digest.clone(),
+                        digest,
                     )));
                 } else {
                     match &message_module {
@@ -296,7 +293,7 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
                             send_to.value(Either::Right((
                                 message_module.clone(),
                                 buf.clone(),
-                                digest.clone(),
+                                digest,
                             )));
                         }
                         _ => {
@@ -331,7 +328,7 @@ pub fn send_serialized_message_to_target<NI, CN, R, O, S, A, L>(
     atlas_common::threadpool::execute(move || {
         if let Some(send_to_me) = send_to_me {
             send_to_me.value_ser(message);
-        } else if let Some(mut send_to) = send_tos {
+        } else if let Some(send_to) = send_tos {
             if send_to.authenticated_state() {
                 send_to.value_ser(message)
             } else {

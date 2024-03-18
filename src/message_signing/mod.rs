@@ -45,7 +45,7 @@ pub(crate) fn verify_ser_message_validity(
     if *header.digest() != digest {
         return Err!(IngestionError::DigestDoesNotMatch(
             digest,
-            header.digest().clone()
+            *header.digest()
         ));
     }
 
@@ -54,7 +54,7 @@ pub(crate) fn verify_ser_message_validity(
     let pub_key = node_info.as_ref().map(NodeInfo::public_key);
 
     if let Some(key) = pub_key {
-        verify_validity(header, message, true, Some(&key))?;
+        verify_validity(header, message, true, Some(key))?;
 
         Ok(())
     } else {

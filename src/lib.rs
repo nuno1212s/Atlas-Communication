@@ -18,8 +18,7 @@ use crate::network_information::initialize_network_info_handle;
 use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
 use crate::serialization::Serializable;
 use crate::stub::{
-    ApplicationStub, BatchedModuleIncomingStub, NetworkStub, OperationStub, ReconfigurationStub,
-    RegularNetworkStub, StateProtocolStub,
+    ApplicationStub, NetworkStub, OperationStub, ReconfigurationStub, StateProtocolStub,
 };
 
 pub mod byte_stub;
@@ -194,7 +193,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
+            id: self.id,
             network_info: self.network_info.clone(),
             rng: self.rng.clone(),
             conn_manager: self.conn_manager.clone(),

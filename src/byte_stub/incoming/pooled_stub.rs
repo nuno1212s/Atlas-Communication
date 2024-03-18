@@ -1,11 +1,11 @@
 use crate::config::ClientPoolConfig;
-use crate::message::{Header, StoredMessage};
+use crate::message::{StoredMessage};
 use crate::metric::CLIENT_POOL_COLLECT_TIME_ID;
-use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
+use crate::stub::{BatchedModuleIncomingStub};
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::node_id::NodeId;
 use atlas_common::Err;
-use atlas_metrics::benchmarks::ClientPerf;
+
 use atlas_metrics::metrics::metric_duration;
 use log::{debug, error, info};
 use std::collections::BTreeMap;
@@ -235,9 +235,9 @@ where
             owner,
         };
 
-        let pool = Arc::new(result);
+        
 
-        pool
+        Arc::new(result)
     }
 
     pub fn start(self: Arc<Self>, pool_id: u32) {
@@ -322,7 +322,7 @@ where
     pub fn collect_requests(
         &self,
         batch_target_size: usize,
-        owner: &Arc<ConnectedPeersGroup<T>>,
+        _owner: &Arc<ConnectedPeersGroup<T>>,
     ) -> std::result::Result<Vec<T>, ClientPoolError> {
         let start = Instant::now();
 
@@ -358,7 +358,7 @@ where
             let client = &connected_peers[(start_point + index) % connected_peers.len()];
 
             if client.is_dc() {
-                dced.push(client.client_id().clone());
+                dced.push(client.client_id());
 
                 //Assign the remaining slots to the next client
                 continue;
@@ -369,7 +369,7 @@ where
             let mut rqs_dumped = match client.dump_requests(replacement_vec) {
                 Ok(rqs) => rqs,
                 Err(vec) => {
-                    dced.push(client.client_id().clone());
+                    dced.push(client.client_id());
 
                     replacement_vec = vec;
                     continue;
@@ -474,20 +474,20 @@ impl<T> ConnectedClientPeer<T> {
     pub fn push_request(&self, msg: T) -> atlas_common::error::Result<()> {
         let mut sender_guard = self.queue.lock().unwrap();
 
-        return if self.disconnect.load(Ordering::Relaxed) {
+        if self.disconnect.load(Ordering::Relaxed) {
             error!(
                 "Failed to send to client {:?} as he was already disconnected",
                 self.peer_id
             );
 
             Err!(ClientPoolError::PooledConnectionClosed(
-                self.peer_id.clone()
+                self.peer_id
             ))
         } else {
             sender_guard.push(msg);
 
             Ok(())
-        };
+        }
     }
 }
 
