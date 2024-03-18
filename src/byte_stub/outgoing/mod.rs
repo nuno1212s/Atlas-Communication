@@ -5,9 +5,9 @@ use getset::{CopyGetters, Getters};
 use atlas_common::collections::HashMap;
 use atlas_common::node_id::NodeId;
 
-use crate::byte_stub::ByteNetworkStub;
 use crate::byte_stub::incoming::PeerStubLookupTable;
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
+use crate::byte_stub::ByteNetworkStub;
 use crate::serialization::Serializable;
 
 pub(super) mod loopback;
@@ -19,23 +19,28 @@ pub(super) mod loopback;
 /// Since we also want to handle loopback efficiently (without going through the binary stack, which
 /// requires deserializing the message without need since we already have the parsed message and the digest/signature).
 pub enum PeerOutgoingConnection<CN, R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     OutgoingStub(CN),
     LoopbackStub(LoopbackOutgoingStub<R, O, S, A>),
 }
 
-
 impl<CN, R, O, S, A> Clone for PeerOutgoingConnection<CN, R, O, S, A>
-    where R: Serializable, O: Serializable, S: Serializable, A: Serializable, CN: Clone {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    CN: Clone,
+{
     fn clone(&self) -> Self {
         match self {
-            Self::OutgoingStub(cn) => {
-                Self::OutgoingStub(cn.clone())
-            }
-            Self::LoopbackStub(loop_back) => {
-                Self::LoopbackStub(loop_back.clone())
-            }
+            Self::OutgoingStub(cn) => Self::OutgoingStub(cn.clone()),
+            Self::LoopbackStub(loop_back) => Self::LoopbackStub(loop_back.clone()),
         }
     }
 }

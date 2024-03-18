@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use std::thread::Thread;
 use std::time::Duration;
 
@@ -8,15 +8,17 @@ use enum_map::EnumMap;
 use getset::{CopyGetters, Getters};
 use strum::IntoEnumIterator;
 
+use crate::byte_stub::connections::NetworkConnectionController;
+use crate::network_information::PendingConnectionManagement;
 use atlas_common::collections::HashMap;
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
-use crate::network_information::PendingConnectionManagement;
-use crate::byte_stub::connections::NetworkConnectionController;
 
-use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, PeerStubLookupTable, pooled_stub, unpooled_stub};
+use crate::byte_stub::incoming::{
+    pooled_stub, unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable,
+};
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{EnumLookupTable, LookupTable, MessageModule};
@@ -25,9 +27,9 @@ use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageH
 use crate::serialization::Serializable;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
 
+pub mod connections;
 pub mod incoming;
 pub(crate) mod outgoing;
-pub mod connections;
 
 pub(crate) const MODULES: usize = enum_map::enum_len::<MessageModule>();
 
@@ -53,14 +55,17 @@ pub trait ByteNetworkController: Send + Sync + Clone {
 /// BS: The byte network stub, which is connection oriented
 /// IS: The incoming stub, which is connection oriented
 pub trait ByteNetworkControllerInit<NI, NSC, BS, IS>: ByteNetworkController {
-    fn initialize_controller(network_info: Arc<NI>,
-                             config: Self::Config,
-                             stub_controllers: NSC) -> Result<Self>
-        where Self: Sized,
-              NI: NetworkInformationProvider,
-              BS: ByteNetworkStub,
-              IS: NodeIncomingStub,
-              NSC: NodeStubController<BS, IS>;
+    fn initialize_controller(
+        network_info: Arc<NI>,
+        config: Self::Config,
+        stub_controllers: NSC,
+    ) -> Result<Self>
+    where
+        Self: Sized,
+        NI: NetworkInformationProvider,
+        BS: ByteNetworkStub,
+        IS: NodeIncomingStub,
+        NSC: NodeStubController<BS, IS>;
 }
 
 /// The network stub for byte messages (after they have gone through the serialization process)
@@ -91,10 +96,14 @@ pub trait NodeStubController<BS, IS>: Send + Sync + Clone {
     /// Returns an implementation of [NodeIncomingStub] that we can use to handle messages we have received from that node.
     /// By handle we mean deserialize, verify and pass on to the correct stub
     fn generate_stub_for(&self, node: NodeId, byte_stub: BS) -> Result<IS>
-        where BS: ByteNetworkStub, IS: NodeIncomingStub;
+    where
+        BS: ByteNetworkStub,
+        IS: NodeIncomingStub;
 
     // Get the stub that is responsible for handling messages from a given node.
-    fn get_stub_for(&self, node: &NodeId) -> Option<IS> where IS: NodeIncomingStub;
+    fn get_stub_for(&self, node: &NodeId) -> Option<IS>
+    where
+        IS: NodeIncomingStub;
 
     // Shutdown the active stubs for a given node (effectively closing the connection)
     fn shutdown_stubs_for(&self, node: &NodeId);
@@ -111,14 +120,19 @@ pub trait NodeIncomingStub: Send + Sync + Clone {
     /// Handle a binary message being received, sent from the peer this stub is responsible for.
     /// This should trigger all necessary actions to handle the message. (Deserialization, signature verification, etc.)
     fn handle_message<NI>(&self, network_info: &Arc<NI>, message: WireMessage) -> Result<()>
-        where NI: NetworkInformationProvider + 'static;
+    where
+        NI: NetworkInformationProvider + 'static;
 }
 
 /// The map of endpoints, connecting each MessageModule with the given
 /// receiver for that module
 pub struct PeerStubEndpoints<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     stub_output_map: EnumMap<MessageModule, ModuleStubEndPoint<R, O, S, A>>,
 }
 
@@ -129,8 +143,12 @@ pub struct PeerStubEndpoints<R, O, S, A>
 /// This is what is going to be used by the final message stub modules in order to receive the
 /// processed messages
 pub enum ModuleStubEndPoint<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     Reconfiguration(StubEndpoint<R::Message>),
     Protocol(StubEndpoint<O::Message>),
     StateProtocol(StubEndpoint<S::Message>),
@@ -140,7 +158,10 @@ pub enum ModuleStubEndPoint<R, O, S, A>
 /// The output stub for a given message module
 ///
 #[derive(Clone)]
-pub enum StubEndpoint<M> where M: Send {
+pub enum StubEndpoint<M>
+where
+    M: Send,
+{
     Unpooled(unpooled_stub::UnpooledStubRX<StoredMessage<M>>),
     Pooled(pooled_stub::PooledStubOutput<StoredMessage<M>>),
 }
@@ -148,8 +169,12 @@ pub enum StubEndpoint<M> where M: Send {
 /// The active stubs, connecting to a given peer
 #[derive(Getters)]
 pub struct ActiveConnections<CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     id: NodeId,
     #[get = "pub"]
     loopback: PeerConnection<CN, R, O, S, A, L>,
@@ -163,8 +188,12 @@ pub struct ActiveConnections<CN, R, O, S, A, L>
 /// propagate messages upwards
 #[derive(Getters)]
 pub struct PeerConnection<CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     #[get = "pub"]
     authenticated: Arc<AtomicBool>,
     #[get = "pub"]
@@ -178,8 +207,12 @@ pub struct PeerConnection<CN, R, O, S, A, L>
 /// Handles all connections , outgoing and incoming
 #[derive(Getters, CopyGetters)]
 pub struct PeerConnectionManager<NI, CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     // The id of the node this connection manager is responsible for
     #[get_copy = "pub"]
     node_id: NodeId,
@@ -197,14 +230,27 @@ pub struct PeerConnectionManager<NI, CN, R, O, S, A, L>
 }
 
 impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
-    where L: Send + Clone,
-          CN: Clone,
-          R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          NI: NetworkInformationProvider {
-    pub fn initialize(network_info: Arc<NI>, id: NodeId, node_type: NodeType, lookup_table: L, rng: Arc<ThreadSafePrng>) -> Result<Self>
-        where L: LookupTable<R, O, S, A> {
-        let (stub_controller, endpoints) = PeerStubController::initialize_controller(id, node_type)?;
+where
+    L: Send + Clone,
+    CN: Clone,
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    NI: NetworkInformationProvider,
+{
+    pub fn initialize(
+        network_info: Arc<NI>,
+        id: NodeId,
+        node_type: NodeType,
+        lookup_table: L,
+        rng: Arc<ThreadSafePrng>,
+    ) -> Result<Self>
+    where
+        L: LookupTable<R, O, S, A>,
+    {
+        let (stub_controller, endpoints) =
+            PeerStubController::initialize_controller(id, node_type)?;
 
         let loopback = Self::initialize_loopback(&stub_controller, lookup_table.clone(), id)?;
 
@@ -223,22 +269,36 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
         Ok(connection_manager)
     }
 
-    fn initialize_loopback(controller: &PeerStubController<R, O, S, A>, l_table: L, node: NodeId) -> Result<PeerConnection<CN, R, O, S, A, L>>
-        where L: LookupTable<R, O, S, A> {
+    fn initialize_loopback(
+        controller: &PeerStubController<R, O, S, A>,
+        l_table: L,
+        node: NodeId,
+    ) -> Result<PeerConnection<CN, R, O, S, A, L>>
+    where
+        L: LookupTable<R, O, S, A>,
+    {
         let table = Self::initialize_stub_lookup_table(controller, node)?;
 
-        let loopback = PeerOutgoingConnection::LoopbackStub(LoopbackOutgoingStub::init(table.clone()));
+        let loopback =
+            PeerOutgoingConnection::LoopbackStub(LoopbackOutgoingStub::init(table.clone()));
 
         let authenticated = Arc::new(AtomicBool::new(true));
 
         Ok(PeerConnection {
             authenticated: authenticated.clone(),
-            incoming_connection: PeerIncomingConnection::initialize_incoming_conn(authenticated, l_table, table),
+            incoming_connection: PeerIncomingConnection::initialize_incoming_conn(
+                authenticated,
+                l_table,
+                table,
+            ),
             outgoing_connection: loopback,
         })
     }
 
-    fn initialize_stub_lookup_table(controller: &PeerStubController<R, O, S, A>, node_id: NodeId) -> Result<PeerStubLookupTable<R, O, S, A>> {
+    fn initialize_stub_lookup_table(
+        controller: &PeerStubController<R, O, S, A>,
+        node_id: NodeId,
+    ) -> Result<PeerStubLookupTable<R, O, S, A>> {
         // Initialize all of the stubs required to create a new connection
         let mut enum_array = Vec::with_capacity(enum_map::enum_len::<MessageModule>());
 
@@ -255,25 +315,44 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
 
     /// Initialize an incoming connection for a given node
     /// This will initialize all the stubs required to handle messages from that node
-    pub fn initialize_incoming_connection_for(&self, authenticated: Arc<AtomicBool>, node_id: NodeId) -> Result<PeerIncomingConnection<R, O, S, A, L>>
-        where L: LookupTable<R, O, S, A> {
+    pub fn initialize_incoming_connection_for(
+        &self,
+        authenticated: Arc<AtomicBool>,
+        node_id: NodeId,
+    ) -> Result<PeerIncomingConnection<R, O, S, A, L>>
+    where
+        L: LookupTable<R, O, S, A>,
+    {
         let lookup_table = self.lookup_table.clone();
 
-        Ok(PeerIncomingConnection::initialize_incoming_conn(authenticated, lookup_table, Self::initialize_stub_lookup_table(&self.controller, node_id)?))
+        Ok(PeerIncomingConnection::initialize_incoming_conn(
+            authenticated,
+            lookup_table,
+            Self::initialize_stub_lookup_table(&self.controller, node_id)?,
+        ))
     }
 
     /// Initialize an outgoing connection for a given node, given a byte level stub to that
     /// node (which is connection oriented)
-    pub fn initialize_outgoing_connection_for(&self, _node_id: NodeId, node_stub: CN) -> Result<PeerOutgoingConnection<CN, R, O, S, A>> {
+    pub fn initialize_outgoing_connection_for(
+        &self,
+        _node_id: NodeId,
+        node_stub: CN,
+    ) -> Result<PeerOutgoingConnection<CN, R, O, S, A>> {
         let connection = PeerOutgoingConnection::OutgoingStub(node_stub);
 
         Ok(connection)
     }
 
     /// Initialize a connection to a given peer
-    pub fn initialize_connection(&self, node: NodeId, node_stub: CN)
-                                 -> Result<PeerConnection<CN, R, O, S, A, L>>
-        where L: LookupTable<R, O, S, A> {
+    pub fn initialize_connection(
+        &self,
+        node: NodeId,
+        node_stub: CN,
+    ) -> Result<PeerConnection<CN, R, O, S, A, L>>
+    where
+        L: LookupTable<R, O, S, A>,
+    {
         let is_known = self.network_info.get_node_info(&node).is_some();
 
         let authenticated = Arc::new(AtomicBool::new(is_known));
@@ -285,38 +364,67 @@ impl<NI, CN, R, O, S, A, L> PeerConnectionManager<NI, CN, R, O, S, A, L>
         })
     }
 
-    pub fn get_connection_to_node(&self, node: &NodeId) -> Option<PeerConnection<CN, R, O, S, A, L>> {
+    pub fn get_connection_to_node(
+        &self,
+        node: &NodeId,
+    ) -> Option<PeerConnection<CN, R, O, S, A, L>> {
         self.connections.get_connection(node)
     }
 }
 
-impl<NI, CN, R, O, S, A, L> PendingConnectionManagement for PeerConnectionManager<NI, CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable, S: Serializable, A: Serializable, L: LookupTable<R, O, S, A>,
-          NI: NetworkInformationProvider,
-          CN: Send + Clone + Sync, {
+impl<NI, CN, R, O, S, A, L> PendingConnectionManagement
+    for PeerConnectionManager<NI, CN, R, O, S, A, L>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    L: LookupTable<R, O, S, A>,
+    NI: NetworkInformationProvider,
+    CN: Send + Clone + Sync,
+{
     fn has_pending_connection(&self, node: &NodeId) -> bool {
         self.connections.has_connection(node)
     }
 
-    fn upgrade_connection_to_known(&self, node: &NodeId, node_type: NodeType, key: PublicKey) -> Result<()> {
-        self.connections().get_connection(node).map(|c| c.authenticated.store(true, std::sync::atomic::Ordering::Relaxed));
+    fn upgrade_connection_to_known(
+        &self,
+        node: &NodeId,
+        node_type: NodeType,
+        key: PublicKey,
+    ) -> Result<()> {
+        self.connections().get_connection(node).map(|c| {
+            c.authenticated
+                .store(true, std::sync::atomic::Ordering::Relaxed)
+        });
 
         Ok(())
     }
 }
 
-impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A, L>> for PeerConnectionManager<NI, CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          L: LookupTable<R, O, S, A>,
-          NI: NetworkInformationProvider,
-          CN: Send + Clone + Sync, {
+impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A, L>>
+    for PeerConnectionManager<NI, CN, R, O, S, A, L>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    L: LookupTable<R, O, S, A>,
+    NI: NetworkInformationProvider,
+    CN: Send + Clone + Sync,
+{
     fn has_stub_for(&self, node: &NodeId) -> bool {
         self.connections.has_connection(node) || *node == self.node_id
     }
 
-    fn generate_stub_for(&self, node: NodeId, byte_stub: CN) -> Result<PeerIncomingConnection<R, O, S, A, L>>
-        where CN: ByteNetworkStub {
+    fn generate_stub_for(
+        &self,
+        node: NodeId,
+        byte_stub: CN,
+    ) -> Result<PeerIncomingConnection<R, O, S, A, L>>
+    where
+        CN: ByteNetworkStub,
+    {
         let connection = self.initialize_connection(node, byte_stub)?;
 
         let incoming_conn = connection.incoming_connection.clone();
@@ -327,7 +435,9 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
     }
 
     fn get_stub_for(&self, node: &NodeId) -> Option<PeerIncomingConnection<R, O, S, A, L>> {
-        self.connections.get_connection(node).map(|c| c.incoming_connection)
+        self.connections
+            .get_connection(node)
+            .map(|c| c.incoming_connection)
     }
 
     fn shutdown_stubs_for(&self, node: &NodeId) {
@@ -335,10 +445,15 @@ impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, 
     }
 }
 
-
 impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable, CN: Clone, L: Clone {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    CN: Clone,
+    L: Clone,
+{
     pub fn has_connection(&self, node: &NodeId) -> bool {
         self.connection_map.lock().unwrap().contains_key(node)
     }
@@ -361,16 +476,29 @@ impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
 }
 
 impl<R, O, S, A> PeerStubEndpoints<R, O, S, A>
-    where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
-    pub fn get_endpoint_for_module(&self, module: &MessageModule) -> &ModuleStubEndPoint<R, O, S, A> {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
+    pub fn get_endpoint_for_module(
+        &self,
+        module: &MessageModule,
+    ) -> &ModuleStubEndPoint<R, O, S, A> {
         &self.stub_output_map[module.clone()]
     }
 }
 
 impl<NI, CN, R, O, S, A, L> Clone for PeerConnectionManager<NI, CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          L: Clone, CN: Clone {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    L: Clone,
+    CN: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             node_id: self.node_id.clone(),
@@ -390,8 +518,12 @@ pub(crate) fn from_arr<T, const N: usize>(v: Vec<T>) -> Result<[T; N]> {
 }
 
 impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     fn init(id: NodeId, loopback: PeerConnection<CN, R, O, S, A, L>) -> Self {
         Self {
             id,
@@ -402,52 +534,52 @@ impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
 }
 
 impl<R, O, S, A> ModuleStubEndPoint<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     // Unwrapping into a reconfiguration endpoint
     pub fn into_reconfig_endpoint(self) -> StubEndpoint<R::Message> {
         match self {
-            ModuleStubEndPoint::Reconfiguration(endpoint) => {
-                endpoint
-            }
-            _ => unreachable!("Unpacked a wrong endpoint?")
+            ModuleStubEndPoint::Reconfiguration(endpoint) => endpoint,
+            _ => unreachable!("Unpacked a wrong endpoint?"),
         }
     }
 
     // Unwrapping into a protocol endpoint
     pub fn into_protocol_endpoint(self) -> StubEndpoint<O::Message> {
         match self {
-            ModuleStubEndPoint::Protocol(endpoint) => {
-                endpoint
-            }
-            _ => unreachable!("Unpacked a wrong endpoint?")
+            ModuleStubEndPoint::Protocol(endpoint) => endpoint,
+            _ => unreachable!("Unpacked a wrong endpoint?"),
         }
     }
 
     // Unwrapping into a state protocol endpoint
     pub fn into_state_protocol_endpoint(self) -> StubEndpoint<S::Message> {
         match self {
-            ModuleStubEndPoint::StateProtocol(endpoint) => {
-                endpoint
-            }
-            _ => unreachable!("Unpacked a wrong endpoint?")
+            ModuleStubEndPoint::StateProtocol(endpoint) => endpoint,
+            _ => unreachable!("Unpacked a wrong endpoint?"),
         }
     }
 
     // Unwrapping into an application endpoint
     pub fn into_application_endpoint(self) -> StubEndpoint<A::Message> {
         match self {
-            ModuleStubEndPoint::Application(endpoint) => {
-                endpoint
-            }
-            _ => unreachable!("Unpacked a wrong endpoint?")
+            ModuleStubEndPoint::Application(endpoint) => endpoint,
+            _ => unreachable!("Unpacked a wrong endpoint?"),
         }
     }
 }
 
 impl<R, O, S, A> Clone for ModuleStubEndPoint<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     fn clone(&self) -> Self {
         match self {
             ModuleStubEndPoint::Reconfiguration(endpoint) => {
@@ -467,65 +599,74 @@ impl<R, O, S, A> Clone for ModuleStubEndPoint<R, O, S, A>
 }
 
 impl<M> ModuleIncomingStub<M> for StubEndpoint<M>
-    where M: Send + Clone {
+where
+    M: Send + Clone,
+{
     fn pending_rqs(&self) -> usize {
         match self {
-            StubEndpoint::Unpooled(unpooled_stub) => {
-                unpooled_stub.pending_rqs()
-            }
-            _ => unreachable!()
+            StubEndpoint::Unpooled(unpooled_stub) => unpooled_stub.pending_rqs(),
+            _ => unreachable!(),
         }
     }
 
     fn receive_messages(&self) -> Result<StoredMessage<M>> {
         match self {
-            StubEndpoint::Unpooled(unpooled_stub) => {
-                unpooled_stub.receive_messages()
-            }
-            _ => unreachable!()
+            StubEndpoint::Unpooled(unpooled_stub) => unpooled_stub.receive_messages(),
+            _ => unreachable!(),
         }
     }
 
     fn try_receive_messages(&self, timeout: Option<Duration>) -> Result<Option<StoredMessage<M>>> {
         match self {
-            StubEndpoint::Unpooled(unpooled_stub) => {
-                unpooled_stub.try_receive_messages(timeout)
-            }
-            _ => unreachable!()
+            StubEndpoint::Unpooled(unpooled_stub) => unpooled_stub.try_receive_messages(timeout),
+            _ => unreachable!(),
         }
     }
 }
 
-impl<M> BatchedModuleIncomingStub<M> for StubEndpoint<M> where M: Send {
+impl<M> BatchedModuleIncomingStub<M> for StubEndpoint<M>
+where
+    M: Send,
+{
     fn receive_messages(&self) -> Result<Vec<StoredMessage<M>>> {
         match &self {
-            StubEndpoint::Pooled(pooled) => {
-                pooled.receive_messages()
-            }
-            _ => unreachable!()
+            StubEndpoint::Pooled(pooled) => pooled.receive_messages(),
+            _ => unreachable!(),
         }
     }
 
-    fn try_receive_messages(&self, timeout: Option<Duration>) -> Result<Option<Vec<StoredMessage<M>>>> {
+    fn try_receive_messages(
+        &self,
+        timeout: Option<Duration>,
+    ) -> Result<Option<Vec<StoredMessage<M>>>> {
         match &self {
-            StubEndpoint::Pooled(pooled) => {
-                pooled.try_receive_messages(timeout)
-            }
-            _ => unreachable!()
+            StubEndpoint::Pooled(pooled) => pooled.try_receive_messages(timeout),
+            _ => unreachable!(),
         }
     }
 }
 
 impl<CN, R, O, S, A, L> PeerConnection<CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     pub fn is_authenticated(&self) -> bool {
-        self.authenticated.load(std::sync::atomic::Ordering::Relaxed)
+        self.authenticated
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
 impl<CN, R, O, S, A, L> Clone for PeerConnection<CN, R, O, S, A, L>
-    where R: Serializable, O: Serializable, S: Serializable, A: Serializable,
-          L: Clone, CN: Clone
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    L: Clone,
+    CN: Clone,
 {
     fn clone(&self) -> Self {
         Self {

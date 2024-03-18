@@ -9,27 +9,31 @@ use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use atlas_common::prng::ThreadSafePrng;
 
-use crate::byte_stub::{ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager};
 use crate::byte_stub::incoming::PeerIncomingConnection;
+use crate::byte_stub::{
+    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager,
+};
 use crate::lookup_table::EnumLookupTable;
 use crate::network_information::initialize_network_info_handle;
 use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
 use crate::serialization::Serializable;
-use crate::stub::{ApplicationStub, BatchedModuleIncomingStub, NetworkStub, OperationStub, ReconfigurationStub, RegularNetworkStub, StateProtocolStub};
+use crate::stub::{
+    ApplicationStub, BatchedModuleIncomingStub, NetworkStub, OperationStub, ReconfigurationStub,
+    RegularNetworkStub, StateProtocolStub,
+};
 
-pub mod config;
 pub mod byte_stub;
-pub mod stub;
-pub mod message;
-pub mod reconfiguration;
+pub mod config;
 pub mod lookup_table;
-pub mod serialization;
-pub mod message_signing;
+pub mod message;
 mod message_ingestion;
-pub mod metric;
 mod message_outgoing;
+pub mod message_signing;
+pub mod metric;
 mod network_information;
-
+pub mod reconfiguration;
+pub mod serialization;
+pub mod stub;
 
 /// The struct that coordinates the entire network stack
 /// We have all of the abstractions here, as we want to handle as many
@@ -41,9 +45,13 @@ mod network_information;
 /// abstract on the network type it's running in
 #[derive(CopyGetters, Getters)]
 pub struct NetworkManagement<NI, CN, BN, R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BN: Clone,
+{
     // The ID of our node
     #[get_copy = "pub(crate)"]
     id: NodeId,
@@ -61,35 +69,59 @@ pub struct NetworkManagement<NI, CN, BN, R, O, S, A>
     byte_network_controller: BN,
 }
 
-pub type NodeInputStub<R, O, S, A> = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
-pub type NodeStubController<NI, CN, R, O, S, A> = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
+pub type NodeInputStub<R, O, S, A> =
+    PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
+pub type NodeStubController<NI, CN, R, O, S, A> =
+    PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
 impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
-    where R: Serializable + 'static, O: Serializable + 'static,
-          S: Serializable + 'static, A: Serializable + 'static,
-          BN: Clone, CN: Clone
+where
+    R: Serializable + 'static,
+    O: Serializable + 'static,
+    S: Serializable + 'static,
+    A: Serializable + 'static,
+    BN: Clone,
+    CN: Clone,
 {
     type NetworkController = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
     type InputStub = PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
-    pub fn initialize(network_info: Arc<NI>, config: BN::Config, reconfiguration_msg: ReconfigurationMessageHandler) -> Result<Arc<Self>>
-        where BN: ByteNetworkControllerInit<NI, PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>, CN, PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>>,
-              NI: NetworkInformationProvider + 'static,
-              CN: ByteNetworkStub + 'static {
+    pub fn initialize(
+        network_info: Arc<NI>,
+        config: BN::Config,
+        reconfiguration_msg: ReconfigurationMessageHandler,
+    ) -> Result<Arc<Self>>
+    where
+        BN: ByteNetworkControllerInit<
+            NI,
+            PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+            CN,
+            PeerIncomingConnection<R, O, S, A, EnumLookupTable<R, O, S, A>>,
+        >,
+        NI: NetworkInformationProvider + 'static,
+        CN: ByteNetworkStub + 'static,
+    {
         let own_info = network_info.own_node_info();
 
         let lookup_table = EnumLookupTable::default();
 
         let rng = Arc::new(ThreadSafePrng::new());
 
-        let connection_controller = PeerConnectionManager::initialize(network_info.clone(), own_info.node_id(), own_info.node_type(), lookup_table, rng.clone())?;
+        let connection_controller = PeerConnectionManager::initialize(
+            network_info.clone(),
+            own_info.node_id(),
+            own_info.node_type(),
+            lookup_table,
+            rng.clone(),
+        )?;
 
         // Initialize the thread that will receive the updates from the reconfiguration protocol
         initialize_network_info_handle(reconfiguration_msg, connection_controller.clone());
 
         // Initialize the underlying byte level network controller
-        let network_controller = BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
+        let network_controller =
+            BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
 
         Ok(Arc::new(Self {
             id: own_info.node_id(),
@@ -101,30 +133,65 @@ impl<NI, CN, BN, R, O, S, A> NetworkManagement<NI, CN, BN, R, O, S, A>
     }
 
     pub fn init_op_stub(&self) -> OperationStub<NI, CN, BN::ConnectionController, R, O, S, A>
-        where BN: ByteNetworkController, {
-        OperationStub::new(self, self.byte_network_controller().connection_controller().clone())
+    where
+        BN: ByteNetworkController,
+    {
+        OperationStub::new(
+            self,
+            self.byte_network_controller()
+                .connection_controller()
+                .clone(),
+        )
     }
 
-    pub fn init_reconf_stub(&self) -> ReconfigurationStub<NI, CN, BN::ConnectionController, R, O, S, A>
-        where BN: ByteNetworkController, {
-        ReconfigurationStub::new(self, self.byte_network_controller().connection_controller().clone())
+    pub fn init_reconf_stub(
+        &self,
+    ) -> ReconfigurationStub<NI, CN, BN::ConnectionController, R, O, S, A>
+    where
+        BN: ByteNetworkController,
+    {
+        ReconfigurationStub::new(
+            self,
+            self.byte_network_controller()
+                .connection_controller()
+                .clone(),
+        )
     }
 
     pub fn init_state_stub(&self) -> StateProtocolStub<NI, CN, BN::ConnectionController, R, O, S, A>
-        where BN: ByteNetworkController, {
-        StateProtocolStub::new(self, self.byte_network_controller().connection_controller().clone())
+    where
+        BN: ByteNetworkController,
+    {
+        StateProtocolStub::new(
+            self,
+            self.byte_network_controller()
+                .connection_controller()
+                .clone(),
+        )
     }
 
     pub fn init_app_stub(&self) -> ApplicationStub<NI, CN, BN::ConnectionController, R, O, S, A>
-        where BN: ByteNetworkController, {
-        ApplicationStub::new(self, self.byte_network_controller().connection_controller().clone())
+    where
+        BN: ByteNetworkController,
+    {
+        ApplicationStub::new(
+            self,
+            self.byte_network_controller()
+                .connection_controller()
+                .clone(),
+        )
     }
 }
 
 impl<NI, CN, BN, R, O, S, A> Clone for NetworkManagement<NI, CN, BN, R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable,
-          BN: Clone, CN: Clone {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BN: Clone,
+    CN: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),

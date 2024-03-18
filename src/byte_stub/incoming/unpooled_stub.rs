@@ -1,15 +1,14 @@
 use std::ops::Deref;
 use std::time::Duration;
 
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
-use atlas_common::{channel, Err};
-use atlas_common::node_id::NodeId;
 use crate::config::UnpooledConnection;
 use crate::lookup_table::MessageModule;
+use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
+use atlas_common::node_id::NodeId;
+use atlas_common::{channel, Err};
 
 use crate::message::StoredMessage;
 use crate::stub::ModuleIncomingStub;
-
 
 /// The stub controller, responsible for generating and managing stubs for connected peers.
 ///
@@ -20,20 +19,21 @@ pub struct UnpooledStubManagement<M> {
 }
 
 impl<M> UnpooledStubManagement<M> {
+    pub fn initialize_controller(
+        config: UnpooledConnection,
+        module: MessageModule,
+    ) -> (Self, UnpooledStubRX<M>) {
+        let (tx, rx) = channel::new_bounded_sync(
+            config.channel_size(),
+            Some(format!("Unpooled stub {:?} (Ingestion)", module)),
+        );
 
-    pub fn initialize_controller(config: UnpooledConnection, module: MessageModule) -> (Self, UnpooledStubRX<M>) {
-        let (tx, rx) = channel::new_bounded_sync(config.channel_size(), Some(format!("Unpooled stub {:?} (Ingestion)", module)));
-
-        (Self {
-            tx
-        }, UnpooledStubRX {
-            rx
-        })
+        (Self { tx }, UnpooledStubRX { rx })
     }
 
     pub fn gen_stub_stub_for_peer(&self, peer: NodeId) -> UnpooledStubTX<M> {
         UnpooledStubTX {
-            tx: self.tx.clone()
+            tx: self.tx.clone(),
         }
     }
 }
@@ -68,13 +68,15 @@ impl<M> Clone for UnpooledStubTX<M> {
 impl<M> Clone for UnpooledStubRX<M> {
     fn clone(&self) -> Self {
         Self {
-            rx: self.rx.clone()
+            rx: self.rx.clone(),
         }
     }
 }
 
-impl<T> ModuleIncomingStub<T> for UnpooledStubRX<StoredMessage<T>> where T: Send {
-
+impl<T> ModuleIncomingStub<T> for UnpooledStubRX<StoredMessage<T>>
+where
+    T: Send,
+{
     fn pending_rqs(&self) -> usize {
         self.rx.len()
     }
@@ -83,7 +85,10 @@ impl<T> ModuleIncomingStub<T> for UnpooledStubRX<StoredMessage<T>> where T: Send
         self.rx.recv()
     }
 
-    fn try_receive_messages(&self, timeout: Option<Duration>) -> atlas_common::error::Result<Option<StoredMessage<T>>> {
+    fn try_receive_messages(
+        &self,
+        timeout: Option<Duration>,
+    ) -> atlas_common::error::Result<Option<StoredMessage<T>>> {
         let result = if let Some(timeout) = timeout {
             self.rx.recv_timeout(timeout)
         } else {
@@ -91,19 +96,13 @@ impl<T> ModuleIncomingStub<T> for UnpooledStubRX<StoredMessage<T>> where T: Send
         };
 
         match result {
-            Ok(message) => {
-                Ok(Some(message))
-            }
-            Err(err) => {
-                match err {
-                    TryRecvError::ChannelDc => {
-                        Err!(TryRecvError::ChannelDc)
-                    }
-                    TryRecvError::ChannelEmpty | TryRecvError::Timeout => {
-                        Ok(None)
-                    }
+            Ok(message) => Ok(Some(message)),
+            Err(err) => match err {
+                TryRecvError::ChannelDc => {
+                    Err!(TryRecvError::ChannelDc)
                 }
-            }
+                TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
+            },
         }
     }
 }

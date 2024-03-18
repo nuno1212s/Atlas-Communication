@@ -1,19 +1,19 @@
+use crate::lookup_table::MessageModule;
+use crate::message_signing::IngestionError;
+use atlas_common::crypto::hash::Digest;
+use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
+use atlas_common::error::*;
+use atlas_common::node_id::NodeId;
+use atlas_common::ordering::{Orderable, SeqNo};
+use atlas_common::Err;
+use bytes::Bytes;
+use futures::{AsyncWrite, AsyncWriteExt};
+use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::Write;
 use std::mem::MaybeUninit;
-use bytes::Bytes;
-use futures::{AsyncWrite, AsyncWriteExt};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use atlas_common::crypto::hash::Digest;
-use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
-use atlas_common::Err;
-use atlas_common::error::*;
-use atlas_common::node_id::NodeId;
-use atlas_common::ordering::{Orderable, SeqNo};
-use crate::lookup_table::MessageModule;
-use crate::message_signing::IngestionError;
 
 /// The buffer type used to serialize messages into.
 pub type Buf = Bytes;
@@ -44,7 +44,6 @@ impl<M> SerializedMessage<M> {
         (self.original, self.raw)
     }
 }
-
 
 /// Contains a system message as well as its respective header.
 /// Convenience type to allow to store messages more directly, instead of having
@@ -77,21 +76,37 @@ impl<M> StoredMessage<M> {
     }
 }
 
-impl<M> Orderable for StoredMessage<M> where M: Orderable {
+impl<M> Orderable for StoredMessage<M>
+where
+    M: Orderable,
+{
     fn sequence_number(&self) -> SeqNo {
         self.message().sequence_number()
     }
 }
 
-impl<M> Clone for StoredMessage<M> where M: Clone {
+impl<M> Clone for StoredMessage<M>
+where
+    M: Clone,
+{
     fn clone(&self) -> Self {
-        Self { header: self.header.clone(), message: self.message.clone() }
+        Self {
+            header: self.header.clone(),
+            message: self.message.clone(),
+        }
     }
 }
 
-impl<M> Debug for StoredMessage<M> where M: Debug {
+impl<M> Debug for StoredMessage<M>
+where
+    M: Debug,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "StoredMessage {{ header: {:?}, message: {:?} }}", self.header, self.message)
+        write!(
+            f,
+            "StoredMessage {{ header: {:?}, message: {:?} }}",
+            self.header, self.message
+        )
     }
 }
 
@@ -124,8 +139,8 @@ pub struct Header {
 #[cfg(feature = "serialize_serde")]
 impl serde::Serialize for Header {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
+    where
+        S: serde::Serializer,
     {
         // TODO: improve this, to avoid allocating a `Vec`
         let mut bytes = vec![0; Self::LENGTH];
@@ -138,8 +153,8 @@ impl serde::Serialize for Header {
 #[cfg(feature = "serialize_serde")]
 impl<'de> serde::Deserialize<'de> for Header {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Header, D::Error>
-        where
-            D: serde::Deserializer<'de>,
+    where
+        D: serde::Deserializer<'de>,
     {
         let bytes: Vec<u8> = serde_bytes::deserialize(deserializer)?;
         let mut hdr: [u8; Self::LENGTH] = [0; Self::LENGTH];
@@ -156,7 +171,6 @@ pub struct WireMessage {
     pub(crate) message_mod: MessageModule,
     pub(crate) payload: Bytes,
 }
-
 
 // FIXME: perhaps use references for serializing and deserializing,
 // to save a stack allocation? probably overkill
@@ -256,25 +270,39 @@ impl Header {
     }
 }
 
-
 impl WireMessage {
     /// The current version of the wire protocol.
     pub const CURRENT_VERSION: u32 = 0;
 
     /// Wraps a `Header` and a byte array payload into a `WireMessage`.
-    pub fn from_parts(header: Header, message_mod: MessageModule, payload: Buf) -> std::result::Result<Self, MessageErrors> {
-        let wm = Self { header, message_mod, payload };
+    pub fn from_parts(
+        header: Header,
+        message_mod: MessageModule,
+        payload: Buf,
+    ) -> std::result::Result<Self, MessageErrors> {
+        let wm = Self {
+            header,
+            message_mod,
+            payload,
+        };
 
         wm.is_valid(None, true)?;
 
         Ok(wm)
     }
 
-    pub fn from_header(header: Header, message_mod: MessageModule) -> std::result::Result<Self, MessageErrors> {
-        let wm = Self { header, message_mod, payload: Buf::new() };
-        
+    pub fn from_header(
+        header: Header,
+        message_mod: MessageModule,
+    ) -> std::result::Result<Self, MessageErrors> {
+        let wm = Self {
+            header,
+            message_mod,
+            payload: Buf::new(),
+        };
+
         wm.is_valid(None, false)?;
-        
+
         Ok(wm)
     }
 
@@ -355,7 +383,11 @@ impl WireMessage {
 
     /// Checks for the correctness of the `WireMessage`. This implies
     /// checking its signature, if a `PublicKey` is provided.
-    pub fn is_valid(&self, public_key: Option<&PublicKey>, check_payload_len: bool) -> std::result::Result<(), MessageErrors> {
+    pub fn is_valid(
+        &self,
+        public_key: Option<&PublicKey>,
+        check_payload_len: bool,
+    ) -> std::result::Result<(), MessageErrors> {
         verify_validity(&self.header, &self.payload, check_payload_len, public_key)
     }
 
@@ -396,10 +428,14 @@ impl WireMessage {
     }
 }
 
-pub fn verify_validity(header: &Header, message: &Buf, check_payload_len: bool, public_key: Option<&PublicKey>) -> std::result::Result<(), MessageErrors> {
-    let preliminary_check_failed =
-        header.version != WireMessage::CURRENT_VERSION
-            || (check_payload_len && header.length != message.len() as u64);
+pub fn verify_validity(
+    header: &Header,
+    message: &Buf,
+    check_payload_len: bool,
+    public_key: Option<&PublicKey>,
+) -> std::result::Result<(), MessageErrors> {
+    let preliminary_check_failed = header.version != WireMessage::CURRENT_VERSION
+        || (check_payload_len && header.length != message.len() as u64);
 
     if preliminary_check_failed {
         return Err!(MessageErrors::InvalidWireMessage);

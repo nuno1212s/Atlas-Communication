@@ -13,13 +13,21 @@ pub(crate) trait PendingConnectionManagement: Send {
     fn has_pending_connection(&self, node: &NodeId) -> bool;
 
     // Upgrade a pending connection to a known connection, as we have received a confirmation from the reconfiguration protocol
-    fn upgrade_connection_to_known(&self, node: &NodeId, node_type: NodeType, key: PublicKey) -> Result<()>;
+    fn upgrade_connection_to_known(
+        &self,
+        node: &NodeId,
+        node_type: NodeType,
+        key: PublicKey,
+    ) -> Result<()>;
 }
 
 /// Initialize the network information thread
-pub(crate) fn initialize_network_info_handle<PM>(reconfiguration_message_handler: ReconfigurationMessageHandler,
-                                                 connection_handler: PM)
-    where PM: PendingConnectionManagement + 'static {
+pub(crate) fn initialize_network_info_handle<PM>(
+    reconfiguration_message_handler: ReconfigurationMessageHandler,
+    connection_handler: PM,
+) where
+    PM: PendingConnectionManagement + 'static,
+{
     std::thread::Builder::new()
         .name(String::from("Network Information Reception Thread"))
         .spawn(move || {

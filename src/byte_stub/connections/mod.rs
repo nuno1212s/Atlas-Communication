@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use atlas_common::channel::OneShotRx;
-use atlas_common::node_id::NodeId;
 use atlas_common::error::*;
+use atlas_common::node_id::NodeId;
+use std::sync::Arc;
 
 /// The byte level connection controller definitions
 ///
@@ -22,4 +22,3 @@ pub trait NetworkConnectionController: Send + Sync {
     // Destroy our connection to a given node
     fn disconnect_from_node(self: &Arc<Self>, node: &NodeId) -> Result<()>;
 }
-

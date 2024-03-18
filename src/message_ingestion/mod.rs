@@ -1,40 +1,48 @@
 use anyhow::Error;
+use atlas_common::Err;
 use log::warn;
 use thiserror::Error;
-use atlas_common::Err;
 
-use crate::lookup_table::{LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable};
+use crate::lookup_table::{
+    LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,
+};
 use crate::message::WireMessage;
-use crate::message_signing::{IngestionError, verify_ser_message_validity};
+use crate::message_signing::{verify_ser_message_validity, IngestionError};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::{deserialize_message, Serializable};
 
 /// Process a message received from the byte layer of the network.
 /// Requires the lookup table to be able to get the appropriate type to deserialize the message.
 /// Then, stubs are retrieved from the peer stub lookup table and the message is pushed to the appropriate stub.
-pub(crate) fn process_wire_message_message<R, O, S, A>(message: WireMessage,
-                                                       authenticated: bool,
-                                                       network_info: &impl NetworkInformationProvider,
-                                                       lookup_table: &impl LookupTable<R, O, S, A>,
-                                                       stubs: &impl PeerStubLookupTable<R, O, S, A>) -> Result<(), IngestMessageError>
-    where R: Serializable,
-          O: Serializable,
-          S: Serializable,
-          A: Serializable
+pub(crate) fn process_wire_message_message<R, O, S, A>(
+    message: WireMessage,
+    authenticated: bool,
+    network_info: &impl NetworkInformationProvider,
+    lookup_table: &impl LookupTable<R, O, S, A>,
+    stubs: &impl PeerStubLookupTable<R, O, S, A>,
+) -> Result<(), IngestMessageError>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
 {
     let (header, module, message) = message.into_inner();
 
     if !authenticated {
         match module {
-            MessageModule::Reconfiguration => {},
+            MessageModule::Reconfiguration => {}
             _ => {
                 return Err!(IngestMessageError::UnAuthenticatedMessage(module));
             }
         }
     } else {
         if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
-            warn!("Failed to verify message validity for message module: {:?}", module );
-            
+            warn!(
+                "Failed to verify message validity for message module: {:?}",
+                module
+            );
+
             return Err!(e);
         }
     }
@@ -77,5 +85,5 @@ pub enum IngestMessageError {
     #[error("Failed to process wire message: {0:?}")]
     SignatureVerificationFailure(#[from] IngestionError),
     #[error("Attempted to process message without authenticated flag, but message was not a reconfiguration message (module: {0:?})")]
-    UnAuthenticatedMessage(MessageModule)
+    UnAuthenticatedMessage(MessageModule),
 }

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use enum_map::{Enum, enum_map, EnumMap};
+use enum_map::{enum_map, Enum, EnumMap};
 #[cfg(feature = "serialize_serde")]
 use serde::{Deserialize, Serialize};
 use strum::EnumIter;
@@ -20,9 +20,14 @@ pub enum MessageModule {
     Application,
 }
 
-
 #[derive(Clone)]
-pub enum ModMessageWrapped<R, O, S, A> where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
+pub enum ModMessageWrapped<R, O, S, A>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     Reconfiguration(R::Message),
     Protocol(O::Message),
     StateProtocol(S::Message),
@@ -31,22 +36,38 @@ pub enum ModMessageWrapped<R, O, S, A> where R: Serializable, O: Serializable, S
 
 /// A trait that defines the behaviour of the lookup table
 pub trait LookupTable<R, O, S, A>: Send + Sync + Clone
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     /// Returns the serialization type that is responsible for handling messages of the given module.
-    fn get_module_for_message(&self, module: &MessageModule) -> &MessageModuleSerialization<R, O, S, A>;
+    fn get_module_for_message(
+        &self,
+        module: &MessageModule,
+    ) -> &MessageModuleSerialization<R, O, S, A>;
 }
 
 /// The look up table to get the appropriate stub for a given message.
 pub trait PeerStubLookupTable<R, O, S, A>: Send + Sync + Clone
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     fn get_stub_for_message(&self, module: &MessageModule) -> &MessageInputStubs<R, O, S, A>;
 }
 
-
 #[derive(Clone)]
-pub enum MessageModuleSerialization<R, O, S, A> where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
+pub enum MessageModuleSerialization<R, O, S, A>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     Reconfiguration(PhantomData<fn() -> R>),
     Protocol(PhantomData<fn() -> O>),
     StateProtocol(PhantomData<fn() -> S>),
@@ -60,7 +81,13 @@ pub enum MessageModuleSerialization<R, O, S, A> where R: Serializable, O: Serial
 ///
 /// So this enum is a necessary evil, along with its associated methods due to the type system.
 #[derive(Clone)]
-pub enum MessageInputStubs<R, O, S, A> where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
+pub enum MessageInputStubs<R, O, S, A>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     Reconfiguration(InternalStubTX<R::Message>),
     Protocol(InternalStubTX<O::Message>),
     StateProtocol(InternalStubTX<S::Message>),
@@ -71,14 +98,22 @@ pub enum MessageInputStubs<R, O, S, A> where R: Serializable, O: Serializable, S
 ///
 /// This should go very fasttttttt.
 pub struct EnumLookupTable<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     enum_map: Arc<EnumMap<MessageModule, MessageModuleSerialization<R, O, S, A>>>,
 }
 
 impl<R, O, S, A> EnumLookupTable<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     pub fn init() -> Self {
         let map = enum_map! {
                 MessageModule::Reconfiguration => MessageModuleSerialization::Reconfiguration(Default::default()),
@@ -94,7 +129,12 @@ impl<R, O, S, A> EnumLookupTable<R, O, S, A>
 }
 
 impl<R, O, S, A> ModMessageWrapped<R, O, S, A>
-    where R: Serializable, O: Serializable, S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     pub fn get_module(&self) -> MessageModule {
         match self {
             ModMessageWrapped::Reconfiguration(_) => MessageModule::Reconfiguration,
@@ -106,21 +146,33 @@ impl<R, O, S, A> ModMessageWrapped<R, O, S, A>
 }
 
 impl<R, O, S, A> LookupTable<R, O, S, A> for EnumLookupTable<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
-    fn get_module_for_message(&self, module: &MessageModule) -> &MessageModuleSerialization<R, O, S, A> {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
+    fn get_module_for_message(
+        &self,
+        module: &MessageModule,
+    ) -> &MessageModuleSerialization<R, O, S, A> {
         &self.enum_map[module.clone()]
     }
 }
 
-impl<R, O, S, A> MessageInputStubs<R, O, S, A> where
-    R: Serializable, O: Serializable, S: Serializable, A: Serializable {
+impl<R, O, S, A> MessageInputStubs<R, O, S, A>
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     pub(crate) fn push_reconfiguration(&self, header: Header, message: R::Message) -> Result<()> {
         match self {
             MessageInputStubs::Reconfiguration(reconf_stub) => {
                 reconf_stub.handle_message(header, message)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -129,7 +181,7 @@ impl<R, O, S, A> MessageInputStubs<R, O, S, A> where
             MessageInputStubs::Protocol(protocol_stub) => {
                 protocol_stub.handle_message(header, message)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -138,7 +190,7 @@ impl<R, O, S, A> MessageInputStubs<R, O, S, A> where
             MessageInputStubs::StateProtocol(state_protocol_stub) => {
                 state_protocol_stub.handle_message(header, message)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -147,24 +199,32 @@ impl<R, O, S, A> MessageInputStubs<R, O, S, A> where
             MessageInputStubs::Application(application_stub) => {
                 application_stub.handle_message(header, message)
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
 
 impl<R, O, S, A> Clone for EnumLookupTable<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     fn clone(&self) -> Self {
         Self {
-            enum_map: self.enum_map.clone()
+            enum_map: self.enum_map.clone(),
         }
     }
 }
 
 impl<R, O, S, A> Default for EnumLookupTable<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable  {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     fn default() -> Self {
         Self::init()
     }

@@ -1,21 +1,21 @@
-use std::sync::Arc;
 use anyhow::Context;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
 use smallvec::SmallVec;
 
-use log::{error, trace};
-use atlas_common::error::*;
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::KeyPair;
+use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use atlas_common::prng::ThreadSafePrng;
 use atlas_common::quiet_unwrap;
+use log::{error, trace};
 
-use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager};
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
+use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager};
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, StoredSerializedMessage, WireMessage};
 use crate::reconfiguration::NetworkInformationProvider;
@@ -28,8 +28,12 @@ type SendTos<CN, R, O, S, A> = SmallVec<[SendTo<CN, R, O, S, A>; NODE_QUORUM_SIZ
 
 #[derive(Getters, CopyGetters)]
 pub struct SendTo<CN, R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     from: NodeId,
     #[get = "pub"]
     to: NodeId,
@@ -41,12 +45,23 @@ pub struct SendTo<CN, R, O, S, A>
 }
 
 impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable, CN: Clone {
-    pub fn initialize_send_tos_serialized<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
-                                                 rng: &Arc<ThreadSafePrng>, target: NodeId)
-                                                 -> (Option<Self>, Option<Self>)
-        where L: Clone + Send, NI: NetworkInformationProvider {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    CN: Clone,
+{
+    pub fn initialize_send_tos_serialized<NI, L>(
+        conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
+        shared: Option<&Arc<KeyPair>>,
+        rng: &Arc<ThreadSafePrng>,
+        target: NodeId,
+    ) -> (Option<Self>, Option<Self>)
+    where
+        L: Clone + Send,
+        NI: NetworkInformationProvider,
+    {
         let mut send_to_me = None;
         let mut send_tos = None;
 
@@ -83,10 +98,16 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
         (send_to_me, send_tos)
     }
 
-    pub fn initialize_send_tos<NI, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>, shared: Option<&Arc<KeyPair>>,
-                                      rng: &Arc<ThreadSafePrng>, targets: impl Iterator<Item=NodeId>)
-                                      -> (Option<Self>, Option<SendTos<CN, R, O, S, A>>)
-        where L: LookupTable<R, O, S, A>, NI: NetworkInformationProvider {
+    pub fn initialize_send_tos<NI, L>(
+        conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
+        shared: Option<&Arc<KeyPair>>,
+        rng: &Arc<ThreadSafePrng>,
+        targets: impl Iterator<Item = NodeId>,
+    ) -> (Option<Self>, Option<SendTos<CN, R, O, S, A>>)
+    where
+        L: LookupTable<R, O, S, A>,
+        NI: NetworkInformationProvider,
+    {
         let mut send_to_me = None;
         let mut send_tos = Some(SmallVec::new());
 
@@ -129,42 +150,71 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
         (send_to_me, send_tos)
     }
 
-    pub fn value(self, msg: Either<(ModMessageWrapped<R, O, S, A>, Buf, Digest), (MessageModule, Buf, Digest)>)
-        where CN: ByteNetworkStub {
+    pub fn value(
+        self,
+        msg: Either<(ModMessageWrapped<R, O, S, A>, Buf, Digest), (MessageModule, Buf, Digest)>,
+    ) where
+        CN: ByteNetworkStub,
+    {
         let key_pair = match &self.shared {
-            None => {
-                None
-            }
-            Some(key_pair) => {
-                Some(&**key_pair)
-            }
+            None => None,
+            Some(key_pair) => Some(&**key_pair),
         };
 
         match (self.peer, msg) {
             (PeerOutgoingConnection::LoopbackStub(stub), Either::Left((msg, buf, digest))) => {
-                let wire_msg = WireMessage::new(self.from, self.to, msg.get_module(), buf, self.nonce, Some(digest), key_pair);
+                let wire_msg = WireMessage::new(
+                    self.from,
+                    self.to,
+                    msg.get_module(),
+                    buf,
+                    self.nonce,
+                    Some(digest),
+                    key_pair,
+                );
 
                 let (header, _, _) = wire_msg.into_inner();
 
                 stub.handle_message(header, msg);
             }
             (PeerOutgoingConnection::OutgoingStub(stub), Either::Right((msg_mod, buf, digest))) => {
-                let wire_msg = WireMessage::new(self.from, self.to, msg_mod, buf, self.nonce, Some(digest), key_pair);
+                let wire_msg = WireMessage::new(
+                    self.from,
+                    self.to,
+                    msg_mod,
+                    buf,
+                    self.nonce,
+                    Some(digest),
+                    key_pair,
+                );
 
                 stub.dispatch_message(wire_msg)
-                    .context(format!("Failed to send message to node {:?} ", self.to)).unwrap();
+                    .context(format!("Failed to send message to node {:?} ", self.to))
+                    .unwrap();
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
     pub fn value_ser(self, msg: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>)
-        where CN: ByteNetworkStub {
+    where
+        CN: ByteNetworkStub,
+    {
         match (self.peer, msg) {
-            (PeerOutgoingConnection::LoopbackStub(stub), StoredSerializedMessage { header, message, .. }) => {
+            (
+                PeerOutgoingConnection::LoopbackStub(stub),
+                StoredSerializedMessage {
+                    header, message, ..
+                },
+            ) => {
                 stub.handle_message(header, message.into_inner().0);
             }
-            (PeerOutgoingConnection::OutgoingStub(stub), StoredSerializedMessage { header, message, .. }) => {
+            (
+                PeerOutgoingConnection::OutgoingStub(stub),
+                StoredSerializedMessage {
+                    header, message, ..
+                },
+            ) => {
                 let (msg, buf) = message.into_inner();
 
                 let module = msg.get_module();
@@ -172,30 +222,38 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
                 let wire_msg = WireMessage::from_parts(header, module, buf).unwrap();
 
                 stub.dispatch_message(wire_msg)
-                    .context(format!("Failed to send message to node {:?} ", self.to)).unwrap();
+                    .context(format!("Failed to send message to node {:?} ", self.to))
+                    .unwrap();
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
 
-pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
-                                                      shared: Option<&Arc<KeyPair>>,
-                                                      rng: &Arc<ThreadSafePrng>,
-                                                      message: ModMessageWrapped<R, O, S, A>,
-                                                      targets: impl Iterator<Item=NodeId>, )
-    where CN: ByteNetworkStub + 'static,
-          R: Serializable + 'static, O: Serializable + 'static,
-          S: Serializable + 'static, A: Serializable + 'static,
-          L: LookupTable<R, O, S, A>,
-          NI: NetworkInformationProvider {
-    
+pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
+    conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
+    shared: Option<&Arc<KeyPair>>,
+    rng: &Arc<ThreadSafePrng>,
+    message: ModMessageWrapped<R, O, S, A>,
+    targets: impl Iterator<Item = NodeId>,
+) where
+    CN: ByteNetworkStub + 'static,
+    R: Serializable + 'static,
+    O: Serializable + 'static,
+    S: Serializable + 'static,
+    A: Serializable + 'static,
+    L: LookupTable<R, O, S, A>,
+    NI: NetworkInformationProvider,
+{
     if let None = &shared {
-        trace!("Sending message from module {:?} without authentication", message.get_module());
+        trace!(
+            "Sending message from module {:?} without authentication",
+            message.get_module()
+        );
     }
-    
+
     let (send_to_me, send_tos) = SendTo::initialize_send_tos(conn_manager, shared, rng, targets);
-    
+
     atlas_common::threadpool::execute(move || {
         let mut buf = Vec::new();
 
@@ -227,14 +285,25 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnect
         if let Some(mut send_tos) = send_tos {
             send_tos.into_iter().for_each(|send_to| {
                 if send_to.authenticated_state() {
-                    send_to.value(Either::Right((message_module.clone(), buf.clone(), digest.clone())));
+                    send_to.value(Either::Right((
+                        message_module.clone(),
+                        buf.clone(),
+                        digest.clone(),
+                    )));
                 } else {
                     match &message_module {
                         MessageModule::Reconfiguration => {
-                            send_to.value(Either::Right((message_module.clone(), buf.clone(), digest.clone())));
+                            send_to.value(Either::Right((
+                                message_module.clone(),
+                                buf.clone(),
+                                digest.clone(),
+                            )));
                         }
                         _ => {
-                            error!("Attempted to send message to node {:?} while unauthenticated", send_to.to());
+                            error!(
+                                "Attempted to send message to node {:?} while unauthenticated",
+                                send_to.to()
+                            );
                         }
                     }
                 }
@@ -243,15 +312,21 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnect
     });
 }
 
-pub fn send_serialized_message_to_target<NI, CN, R, O, S, A, L>(conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
-                                                                message: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>,
-                                                                target: NodeId)
-    where CN: ByteNetworkStub + 'static,
-          R: Serializable + 'static, O: Serializable + 'static,
-          S: Serializable + 'static, A: Serializable + 'static,
-          L: LookupTable<R, O, S, A>,
-          NI: NetworkInformationProvider {
-    let (send_to_me, send_tos) = SendTo::initialize_send_tos_serialized(conn_manager, None, conn_manager.rng(), target);
+pub fn send_serialized_message_to_target<NI, CN, R, O, S, A, L>(
+    conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
+    message: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>,
+    target: NodeId,
+) where
+    CN: ByteNetworkStub + 'static,
+    R: Serializable + 'static,
+    O: Serializable + 'static,
+    S: Serializable + 'static,
+    A: Serializable + 'static,
+    L: LookupTable<R, O, S, A>,
+    NI: NetworkInformationProvider,
+{
+    let (send_to_me, send_tos) =
+        SendTo::initialize_send_tos_serialized(conn_manager, None, conn_manager.rng(), target);
 
     atlas_common::threadpool::execute(move || {
         if let Some(send_to_me) = send_to_me {
@@ -261,11 +336,12 @@ pub fn send_serialized_message_to_target<NI, CN, R, O, S, A, L>(conn_manager: &P
                 send_to.value_ser(message)
             } else {
                 match &message.message().original().get_module() {
-                    MessageModule::Reconfiguration => {
-                        send_to.value_ser(message)
-                    }
+                    MessageModule::Reconfiguration => send_to.value_ser(message),
                     _ => {
-                        error!("Attempted to send message to node {:?} while unauthenticated", send_to.to());
+                        error!(
+                            "Attempted to send message to node {:?} while unauthenticated",
+                            send_to.to()
+                        );
                     }
                 }
             }

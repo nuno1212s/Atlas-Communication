@@ -4,14 +4,22 @@ use crate::message::{Header, StoredMessage, StoredSerializedMessage};
 use crate::serialization::Serializable;
 
 pub struct LoopbackOutgoingStub<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     loopback_stubs: incoming::PeerStubLookupTable<R, O, S, A>,
 }
 
 impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     pub fn init(stub_controller: incoming::PeerStubLookupTable<R, O, S, A>) -> Self {
         Self {
             loopback_stubs: stub_controller,
@@ -34,9 +42,11 @@ impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
             }
         }
     }
-    
+
     fn handle_reconf_message(&self, message: StoredMessage<R::Message>) {
-        let stub = self.loopback_stubs.get_stub_for_message(&MessageModule::Reconfiguration);
+        let stub = self
+            .loopback_stubs
+            .get_stub_for_message(&MessageModule::Reconfiguration);
 
         let (header, message) = message.into_inner();
 
@@ -45,7 +55,9 @@ impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
 
     // Handle the rest of the message modules
     fn handle_protocol_message(&self, message: StoredMessage<O::Message>) {
-        let stub = self.loopback_stubs.get_stub_for_message(&MessageModule::Protocol);
+        let stub = self
+            .loopback_stubs
+            .get_stub_for_message(&MessageModule::Protocol);
 
         let (header, message) = message.into_inner();
 
@@ -53,7 +65,9 @@ impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
     }
 
     fn handle_state_protocol_message(&self, message: StoredMessage<S::Message>) {
-        let stub = self.loopback_stubs.get_stub_for_message(&MessageModule::StateProtocol);
+        let stub = self
+            .loopback_stubs
+            .get_stub_for_message(&MessageModule::StateProtocol);
 
         let (header, message) = message.into_inner();
 
@@ -61,18 +75,23 @@ impl<R, O, S, A> LoopbackOutgoingStub<R, O, S, A>
     }
 
     fn handle_application_message(&self, message: StoredMessage<A::Message>) {
-        let stub = self.loopback_stubs.get_stub_for_message(&MessageModule::Application);
+        let stub = self
+            .loopback_stubs
+            .get_stub_for_message(&MessageModule::Application);
 
         let (header, message) = message.into_inner();
 
         stub.push_application(header, message).unwrap();
     }
-
 }
 
 impl<R, O, S, A> Clone for LoopbackOutgoingStub<R, O, S, A>
-    where R: Serializable, O: Serializable,
-          S: Serializable, A: Serializable  {
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+{
     fn clone(&self) -> Self {
         Self {
             loopback_stubs: self.loopback_stubs.clone(),

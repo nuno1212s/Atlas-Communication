@@ -1,18 +1,18 @@
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
-use log::{debug, error, info};
-use thiserror::Error;
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
-use atlas_common::Err;
-use atlas_common::node_id::NodeId;
-use atlas_metrics::benchmarks::ClientPerf;
-use atlas_metrics::metrics::metric_duration;
 use crate::config::ClientPoolConfig;
 use crate::message::{Header, StoredMessage};
 use crate::metric::CLIENT_POOL_COLLECT_TIME_ID;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
+use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
+use atlas_common::node_id::NodeId;
+use atlas_common::Err;
+use atlas_metrics::benchmarks::ClientPerf;
+use atlas_metrics::metrics::metric_duration;
+use log::{debug, error, info};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use thiserror::Error;
 
 pub struct PooledStubOutput<M>(ChannelSyncRx<ClientRqBatchOutput<M>>);
 
@@ -84,12 +84,16 @@ pub struct ConnectedPeersPool<T: Send> {
     batch_sleep_micros: u64,
 }
 
-impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
-
-    pub fn new(client_pool_config: ClientPoolConfig,
-               batch_transmission: ChannelSyncTx<ClientRqBatchOutput<T>>,
-               batch_reception: ChannelSyncRx<ClientRqBatchOutput<T>>,
-               own_id: NodeId) -> Arc<Self> {
+impl<T> ConnectedPeersGroup<T>
+where
+    T: Send + 'static,
+{
+    pub fn new(
+        client_pool_config: ClientPoolConfig,
+        batch_transmission: ChannelSyncTx<ClientRqBatchOutput<T>>,
+        batch_reception: ChannelSyncRx<ClientRqBatchOutput<T>>,
+        own_id: NodeId,
+    ) -> Arc<Self> {
         Arc::new(Self {
             own_id,
             client_pools: Mutex::new(BTreeMap::new()),
@@ -152,9 +156,7 @@ impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
 
         //In the case all the pools are already full, allocate a new pool
         let pool_id = match self.get_pool_id() {
-            Ok(pool_id) => {
-                pool_id
-            }
+            Ok(pool_id) => pool_id,
             Err(_err) => {
                 panic!("Failed to allocate new pool id");
             }
@@ -167,7 +169,8 @@ impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
             Arc::clone(self),
             self.clients_per_pool,
             self.batch_timeout_micros,
-            self.batch_sleep_micros);
+            self.batch_sleep_micros,
+        );
 
         match pool.attempt_to_add(clone_queue) {
             Ok(_) => {}
@@ -187,7 +190,6 @@ impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
             pool_clone.start(id as u32);
         }
 
-
         connected_client
     }
 
@@ -195,7 +197,7 @@ impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
         debug!("{:?} // DELETING POOL {}", self.own_id, pool_id);
 
         match self.client_pools.lock().unwrap().remove(&pool_id) {
-            None => { false }
+            None => false,
             Some(pool) => {
                 pool.shutdown();
                 info!("{:?} // DELETED POOL {}", self.own_id, pool_id);
@@ -206,12 +208,21 @@ impl<T> ConnectedPeersGroup<T> where T: Send + 'static {
     }
 }
 
-impl<T> ConnectedPeersPool<T> where T: Send + 'static {
+impl<T> ConnectedPeersPool<T>
+where
+    T: Send + 'static,
+{
     //We mark the owner as static since if the pool is active then
     //The owner also has to be active
-    pub fn new(pool_id: usize, batch_size: usize, batch_transmission: ChannelSyncTx<ClientRqBatchOutput<T>>,
-               owner: Arc<ConnectedPeersGroup<T>>, client_per_pool: usize,
-               batch_timeout_micros: u64, batch_sleep_micros: u64) -> Arc<Self> {
+    pub fn new(
+        pool_id: usize,
+        batch_size: usize,
+        batch_transmission: ChannelSyncTx<ClientRqBatchOutput<T>>,
+        owner: Arc<ConnectedPeersGroup<T>>,
+        client_per_pool: usize,
+        batch_timeout_micros: u64,
+        batch_sleep_micros: u64,
+    ) -> Arc<Self> {
         let result = Self {
             pool_id,
             connected_clients: Mutex::new(Vec::new()),
@@ -230,7 +241,6 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
     }
 
     pub fn start(self: Arc<Self>, pool_id: u32) {
-
         //Spawn the thread that will collect client requests
         //and then send the batches to the channel.
         std::thread::Builder::new()
@@ -242,7 +252,7 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
                     }
 
                     let vec = match self.collect_requests(self.batch_size, &self.owner) {
-                        Ok(vec) => { vec }
+                        Ok(vec) => vec,
                         Err(err) => {
                             match err {
                                 ClientPoolError::ClosePool => {
@@ -253,27 +263,32 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
 
                                     break;
                                 }
-                                _ => { break; }
+                                _ => {
+                                    break;
+                                }
                             }
                         }
                     };
 
                     if !vec.is_empty() {
-                        self.batch_transmission.send_return((vec, Instant::now()))
+                        self.batch_transmission
+                            .send_return((vec, Instant::now()))
                             .expect("Failed to send proposed batch");
 
                         // Sleep for a determined amount of time to allow clients to send requests
                         let three_quarters_sleep = (self.batch_sleep_micros / 4) * 3;
                         let five_quarters_sleep = (self.batch_sleep_micros / 4) * 5;
 
-                        let sleep_micros = fastrand::u64(three_quarters_sleep..=five_quarters_sleep);
+                        let sleep_micros =
+                            fastrand::u64(three_quarters_sleep..=five_quarters_sleep);
 
                         std::thread::sleep(Duration::from_micros(sleep_micros));
                     }
 
                     // backoff.spin();
                 }
-            }).unwrap();
+            })
+            .unwrap();
     }
 
     pub fn attempt_to_add(&self, client: ClientPeer<T>) -> std::result::Result<(), ClientPeer<T>> {
@@ -291,10 +306,11 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
     pub fn attempt_to_remove(&self, client_id: &NodeId) -> std::result::Result<bool, ()> {
         let mut guard = self.connected_clients.lock().unwrap();
 
-        return match guard.iter().position(|client| client.client_id().eq(client_id)) {
-            None => {
-                Err(())
-            }
+        return match guard
+            .iter()
+            .position(|client| client.client_id().eq(client_id))
+        {
+            None => Err(()),
             Some(position) => {
                 guard.swap_remove(position);
 
@@ -303,7 +319,11 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
         };
     }
 
-    pub fn collect_requests(&self, batch_target_size: usize, owner: &Arc<ConnectedPeersGroup<T>>) -> std::result::Result<Vec<T>, ClientPoolError> {
+    pub fn collect_requests(
+        &self,
+        batch_target_size: usize,
+        owner: &Arc<ConnectedPeersGroup<T>>,
+    ) -> std::result::Result<Vec<T>, ClientPoolError> {
         let start = Instant::now();
 
         let vec_size = std::cmp::max(batch_target_size, self.owner.per_client_cache);
@@ -347,7 +367,7 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
             //Collect all possible requests from each client
 
             let mut rqs_dumped = match client.dump_requests(replacement_vec) {
-                Ok(rqs) => { rqs }
+                Ok(rqs) => rqs,
                 Err(vec) => {
                     dced.push(client.client_id().clone());
 
@@ -373,7 +393,9 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
                 } else {
                     let current_time = Instant::now();
 
-                    if current_time.duration_since(start_time).as_micros() >= self.batch_timeout_micros as u128 {
+                    if current_time.duration_since(start_time).as_micros()
+                        >= self.batch_timeout_micros as u128
+                    {
                         //Check if a given amount of time limit has passed, to prevent us getting
                         //Stuck while checking for requests
                         break;
@@ -391,9 +413,7 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
 
             for node in &dced {
                 //This is O(n*c) but there isn't really a much better way to do it I guess
-                let option = guard.iter().position(|x| {
-                    x.client_id().0 == node.0
-                });
+                let option = guard.iter().position(|x| x.client_id().0 == node.0);
 
                 match option {
                     None => {
@@ -424,7 +444,10 @@ impl<T> ConnectedPeersPool<T> where T: Send + 'static {
     }
 
     pub fn shutdown(&self) {
-        info!("{:?} // Pool {} is shutting down", self.owner.own_id, self.pool_id);
+        info!(
+            "{:?} // Pool {} is shutting down",
+            self.owner.own_id, self.pool_id
+        );
 
         self.finish_execution.store(true, Ordering::Relaxed);
     }
@@ -452,9 +475,14 @@ impl<T> ConnectedClientPeer<T> {
         let mut sender_guard = self.queue.lock().unwrap();
 
         return if self.disconnect.load(Ordering::Relaxed) {
-            error!("Failed to send to client {:?} as he was already disconnected", self.peer_id);
+            error!(
+                "Failed to send to client {:?} as he was already disconnected",
+                self.peer_id
+            );
 
-            Err!(ClientPoolError::PooledConnectionClosed( self.peer_id.clone()))
+            Err!(ClientPoolError::PooledConnectionClosed(
+                self.peer_id.clone()
+            ))
         } else {
             sender_guard.push(msg);
 
@@ -492,44 +520,29 @@ impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<StoredMessage<M>> {
         self.0.recv().map(|(vec, _)| vec)
     }
 
-    fn try_receive_messages(&self, timeout: Option<Duration>) -> atlas_common::error::Result<Option<Vec<StoredMessage<M>>>> {
+    fn try_receive_messages(
+        &self,
+        timeout: Option<Duration>,
+    ) -> atlas_common::error::Result<Option<Vec<StoredMessage<M>>>> {
         match timeout {
-            None => {
-                match self.0.try_recv() {
-                    Ok(message) => {
-                        Ok(Some(message.0))
+            None => match self.0.try_recv() {
+                Ok(message) => Ok(Some(message.0)),
+                Err(err) => match err {
+                    TryRecvError::ChannelEmpty => Ok(None),
+                    TryRecvError::ChannelDc | TryRecvError::Timeout => {
+                        Err!(err)
                     }
-                    Err(err) => {
-                        match err {
-                            TryRecvError::ChannelEmpty => {
-                                Ok(None)
-                            }
-                            TryRecvError::ChannelDc | TryRecvError::Timeout => {
-                                Err!(err)
-                            }
-                        }
+                },
+            },
+            Some(duration) => match self.0.recv_timeout(duration) {
+                Ok(message) => Ok(Some(message.0)),
+                Err(err) => match err {
+                    TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
+                    TryRecvError::ChannelDc => {
+                        Err!(err)
                     }
-                }
-            }
-            Some(duration) => {
-
-                match self.0.recv_timeout(duration) {
-                    Ok(message) => {
-                        Ok(Some(message.0))
-                    }
-                    Err(err) => {
-                        match err {
-                            TryRecvError::ChannelEmpty | TryRecvError::Timeout => {
-                                Ok(None)
-                            }
-                            TryRecvError::ChannelDc => {
-                                Err!(err)
-                            }
-                        }
-                    }
-                }
-
-            }
+                },
+            },
         }
     }
 }
