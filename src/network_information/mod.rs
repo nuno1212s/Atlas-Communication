@@ -1,4 +1,3 @@
-use futures::task::SpawnExt;
 use log::error;
 
 use atlas_common::crypto::signature::PublicKey;

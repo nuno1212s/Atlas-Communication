@@ -1,5 +1,5 @@
-#![feature(return_position_impl_trait_in_trait)]
 #![feature(inherent_associated_types)]
+#![allow(dead_code)]
 
 use std::sync::Arc;
 
@@ -18,7 +18,7 @@ use crate::network_information::initialize_network_info_handle;
 use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
 use crate::serialization::Serializable;
 use crate::stub::{
-    ApplicationStub, NetworkStub, OperationStub, ReconfigurationStub, StateProtocolStub,
+    ApplicationStub, OperationStub, ReconfigurationStub, StateProtocolStub,
 };
 
 pub mod byte_stub;
@@ -62,7 +62,7 @@ where
     rng: Arc<ThreadSafePrng>,
     // The controller for all the connections that are incoming into our node
     #[get = "pub(crate)"]
-    conn_manager: PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>,
+    conn_manager: NodeStubController<NI, CN, R, O, S, A>,
     // The byte level network controller
     #[get = "pub"]
     byte_network_controller: BN,

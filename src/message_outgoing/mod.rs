@@ -28,11 +28,11 @@ type SendTos<CN, R, O, S, A> = SmallVec<[SendTo<CN, R, O, S, A>; NODE_QUORUM_SIZ
 
 #[derive(Getters, CopyGetters)]
 pub struct SendTo<CN, R, O, S, A>
-where
-    R: Serializable,
-    O: Serializable,
-    S: Serializable,
-    A: Serializable,
+    where
+        R: Serializable,
+        O: Serializable,
+        S: Serializable,
+        A: Serializable,
 {
     from: NodeId,
     #[get = "pub"]
@@ -45,12 +45,12 @@ where
 }
 
 impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
-where
-    R: Serializable,
-    O: Serializable,
-    S: Serializable,
-    A: Serializable,
-    CN: Clone,
+    where
+        R: Serializable,
+        O: Serializable,
+        S: Serializable,
+        A: Serializable,
+        CN: Clone,
 {
     pub fn initialize_send_tos_serialized<NI, L>(
         conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
@@ -58,9 +58,9 @@ where
         rng: &Arc<ThreadSafePrng>,
         target: NodeId,
     ) -> (Option<Self>, Option<Self>)
-    where
-        L: Clone + Send,
-        NI: NetworkInformationProvider,
+        where
+            L: Clone + Send,
+            NI: NetworkInformationProvider,
     {
         let mut send_to_me = None;
         let mut send_tos = None;
@@ -98,15 +98,17 @@ where
         (send_to_me, send_tos)
     }
 
+    pub type InitializedSendTos = (Option<Self>, Option<SendTos<CN, R, O, S, A>>);
+    
     pub fn initialize_send_tos<NI, L>(
         conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
         shared: Option<&Arc<KeyPair>>,
         rng: &Arc<ThreadSafePrng>,
-        targets: impl Iterator<Item = NodeId>,
-    ) -> (Option<Self>, Option<SendTos<CN, R, O, S, A>>)
-    where
-        L: LookupTable<R, O, S, A>,
-        NI: NetworkInformationProvider,
+        targets: impl Iterator<Item=NodeId>,
+    ) -> Self::InitializedSendTos
+        where
+            L: LookupTable<R, O, S, A>,
+            NI: NetworkInformationProvider,
     {
         let mut send_to_me = None;
         let mut send_tos = Some(SmallVec::new());
@@ -150,9 +152,12 @@ where
         (send_to_me, send_tos)
     }
 
+    pub type TypedMessage = (ModMessageWrapped<R, O, S, A>, Buf, Digest);
+    pub type SerializedMessage = (MessageModule, Buf, Digest);
+
     pub fn value(
         self,
-        msg: Either<(ModMessageWrapped<R, O, S, A>, Buf, Digest), (MessageModule, Buf, Digest)>,
+        msg: Either<Self::TypedMessage, Self::SerializedMessage>,
     ) where
         CN: ByteNetworkStub,
     {
@@ -194,8 +199,8 @@ where
     }
 
     pub fn value_ser(self, msg: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>)
-    where
-        CN: ByteNetworkStub,
+        where
+            CN: ByteNetworkStub,
     {
         match (self.peer, msg) {
             (
@@ -222,7 +227,6 @@ where
                     .context(format!("Failed to send message to node {:?} ", self.to))
                     .unwrap();
             }
-            _ => unreachable!(),
         }
     }
 }
@@ -232,7 +236,7 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
     shared: Option<&Arc<KeyPair>>,
     rng: &Arc<ThreadSafePrng>,
     message: ModMessageWrapped<R, O, S, A>,
-    targets: impl Iterator<Item = NodeId>,
+    targets: impl Iterator<Item=NodeId>,
 ) where
     CN: ByteNetworkStub + 'static,
     R: Serializable + 'static,

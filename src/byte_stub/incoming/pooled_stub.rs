@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::ClientPoolConfig;
 use crate::message::StoredMessage;
 use crate::metric::CLIENT_POOL_COLLECT_TIME_ID;
@@ -85,8 +87,8 @@ pub struct ConnectedPeersPool<T: Send> {
 }
 
 impl<T> ConnectedPeersGroup<T>
-where
-    T: Send + 'static,
+    where
+        T: Send + 'static,
 {
     pub fn new(
         client_pool_config: ClientPoolConfig,
@@ -142,7 +144,7 @@ where
         {
             let guard = self.client_pools.lock().unwrap();
 
-            for (_pool_id, pool) in &*guard {
+            for pool in guard.values() {
                 match pool.attempt_to_add(clone_queue) {
                     Ok(_) => {
                         return connected_client;
@@ -209,8 +211,8 @@ where
 }
 
 impl<T> ConnectedPeersPool<T>
-where
-    T: Send + 'static,
+    where
+        T: Send + 'static,
 {
     //We mark the owner as static since if the pool is active then
     //The owner also has to be active
