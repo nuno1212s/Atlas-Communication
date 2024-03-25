@@ -5,7 +5,7 @@ use anyhow::Context;
 use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
-use log::{error, trace};
+use log::{error, info, trace, warn};
 use smallvec::SmallVec;
 
 use atlas_common::crypto::hash::Digest;
@@ -15,7 +15,7 @@ use atlas_common::prng::ThreadSafePrng;
 use atlas_common::quiet_unwrap;
 use atlas_metrics::metrics::metric_duration;
 
-use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager};
+use crate::byte_stub::{ByteNetworkStub, DispatchError, PeerConnectionManager};
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, StoredSerializedMessage, WireMessage};
@@ -101,7 +101,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     }
 
     pub type InitializedSendTos = (Option<Self>, Option<SendTos<CN, R, O, S, A>>);
-    
+
     pub fn initialize_send_tos<NI, L>(
         conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
         shared: Option<&Arc<KeyPair>>,
@@ -161,7 +161,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
         self,
         msg: Either<Self::TypedMessage, Self::SerializedMessage>,
     ) where
-        CN: ByteNetworkStub,
+        CN: ByteNetworkStub + 'static,
     {
         let key_pair = self.shared.as_deref();
 
@@ -192,9 +192,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
                     key_pair,
                 );
 
-                stub.dispatch_message(wire_msg)
-                    .context(format!("Failed to send message to node {:?} ", self.to))
-                    .unwrap();
+                dispatch_message(stub, wire_msg, self.to);
             }
             _ => unreachable!(),
         }
@@ -202,7 +200,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
 
     pub fn value_ser(self, msg: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>)
         where
-            CN: ByteNetworkStub,
+            CN: ByteNetworkStub + 'static,
     {
         match (self.peer, msg) {
             (
@@ -224,13 +222,56 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
                 let module = msg.get_module();
 
                 let wire_msg = WireMessage::from_parts(header, module, buf).unwrap();
-
-                stub.dispatch_message(wire_msg)
-                    .context(format!("Failed to send message to node {:?} ", self.to))
-                    .unwrap();
+                
+                dispatch_message(stub, wire_msg, self.to);
             }
         }
     }
+}
+
+fn dispatch_message<CN>(stub: CN, message: WireMessage, to: NodeId)
+    where CN: ByteNetworkStub + 'static {
+    dispatch_message_circuit(stub, message, to, 0);
+}
+
+const CIRCUIT_BREAKER_ATTEMPTS: usize = 5;
+
+fn dispatch_message_circuit<CN>(stub: CN, message: WireMessage, to: NodeId, circuits: usize)
+    where
+        CN: ByteNetworkStub + 'static
+{
+    if let Err(dispatch_error) = stub.dispatch_message(message) {
+        match dispatch_error {
+            DispatchError::CouldNotDispatchTryLater(message) => {
+                if circuits > CIRCUIT_BREAKER_ATTEMPTS {
+                    error!("Failed to send message to node {:?} after {} attempts, blocking", to, circuits);
+
+                    stub
+                        .dispatch_blocking(message)
+                        .context("Failed to send message to node")
+                        .unwrap();
+
+                    return;
+                }
+
+                warn!("Failed to send message to node {:?} immediately, retrying for the {} time with a circuit breaker pattern", to, circuits);
+                
+                handle_failed_message_delivery_circuit(stub, message, to, circuits + 1);
+            }
+            DispatchError::InternalError(err) => {
+                error!("Internal error while sending message to node {:?}: {:?}", to, err);
+            }
+        }
+    };
+}
+
+fn handle_failed_message_delivery_circuit<CN>(stub: CN, wire_msg: WireMessage, to: NodeId, circuits_made: usize)
+    where
+        CN: ByteNetworkStub + 'static
+{
+    atlas_common::threadpool::execute(move || {
+        dispatch_message_circuit(stub, wire_msg, to, circuits_made);
+    });
 }
 
 pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
@@ -258,12 +299,12 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
     let (send_to_me, send_tos) = SendTo::initialize_send_tos(conn_manager, shared, rng, targets);
 
     let alloc_time = Instant::now();
-    
+
     atlas_common::threadpool::execute(move || {
         metric_duration(THREADPOOL_PASS_TIME_ID, alloc_time.elapsed());
-        
+
         let serialize_time_start = Instant::now();
-        
+
         let mut buf = Vec::new();
 
         let message_module = message.get_module();

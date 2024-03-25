@@ -6,9 +6,7 @@ use atlas_common::peer_addr::PeerAddr;
 use atlas_common::{channel, error};
 use atlas_communication::byte_stub::connections::NetworkConnectionController;
 use atlas_communication::byte_stub::incoming::PeerIncomingConnection;
-use atlas_communication::byte_stub::{
-    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager,
-};
+use atlas_communication::byte_stub::{ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, DispatchError, PeerConnectionManager};
 use atlas_communication::lookup_table::EnumLookupTable;
 use atlas_communication::message::{Header, WireMessage};
 use atlas_communication::reconfiguration;
@@ -139,12 +137,14 @@ impl InternalMessageVerifier<MockMessage> for MockVerifier {
 struct MockByteStub(ChannelSyncTx<WireMessage>);
 
 impl ByteNetworkStub for MockByteStub {
-    fn dispatch_message(&self, message: WireMessage) -> atlas_common::error::Result<()> {
+    fn dispatch_message(&self, message: WireMessage) -> atlas_common::error::Result<DispatchError> {
         // When we dispatch a message, we send it to the other node
 
         self.0
             .send(message)
-            .context("Failed to send message to another node")
+            .context("Failed to send message to another node")?;
+        
+        Ok(DispatchError::Sucessfull)
     }
 }
 

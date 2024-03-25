@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use enum_map::EnumMap;
 use getset::{CopyGetters, Getters};
 use strum::IntoEnumIterator;
+use thiserror::Error;
 
 use crate::byte_stub::connections::NetworkConnectionController;
 use crate::network_information::PendingConnectionManagement;
@@ -68,19 +69,38 @@ pub trait ByteNetworkControllerInit<NI, NSC, BS, IS>: ByteNetworkController {
             NSC: NodeStubController<BS, IS>;
 }
 
+/// The result of attempting to dispatch a message
+/// If the message could not be dispatched, we should try again later
+#[derive(Error, Debug)]
+pub enum DispatchError {
+    #[error("Could not dispatch the message, try again later. Message: {0:?}")]
+    CouldNotDispatchTryLater(WireMessage),
+    #[error("Failed due to error {0:?}")]
+    InternalError(#[from] anyhow::Error),
+}
+
 /// The network stub for byte messages (after they have gone through the serialization process)
 /// This is connection oriented, meaning each Stub which implements this trait should only
 /// be referring to a single connection to a single peer
 pub trait ByteNetworkStub: Send + Sync + Clone {
+    
     // Dispatch a message to the peer this stub is responsible for.
-    fn dispatch_message(&self, message: WireMessage) -> Result<()>;
+    // 
+    fn dispatch_message(&self, message: WireMessage) -> std::result::Result<(), DispatchError> {
+        self.dispatch_blocking(message)?;
+
+        Ok(())
+    }
+    
+    // Dispatch
+    fn dispatch_blocking(&self, message: WireMessage) -> Result<()>;
+    
 }
 
 /// The stub controller, responsible for generating and managing stubs for connected peers.
 ///
 /// See why we chose a model where we orient ourselves around the peer instead of the message
-/// in [NodeIncomingStub]. It's basically revolving around maintaining context, reducing lookups on
-/// connection maps and non static look up tables (which would have to be protected with locks since they
+/// in [NodeIncomingStub]. It's basically revolving around maintaining context, reducing lookups on connection maps and non static look up tables (which would have to be protected with locks since they
 /// would have to be modified on the fly).
 ///
 /// This is a trait (and not directly the [PeerConnectionManager] which implements this trait and its behaviours)
