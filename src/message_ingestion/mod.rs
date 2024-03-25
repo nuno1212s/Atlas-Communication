@@ -1,13 +1,16 @@
+use std::time::Instant;
 use anyhow::Error;
 use atlas_common::Err;
 use log::warn;
 use thiserror::Error;
+use atlas_metrics::metrics::metric_duration;
 
 use crate::lookup_table::{
     LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,
 };
 use crate::message::WireMessage;
 use crate::message_signing::{verify_ser_message_validity, IngestionError};
+use crate::metric::COMM_DESERIALIZE_VERIFY_TIME_ID;
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::{deserialize_message, Serializable};
 
@@ -27,6 +30,8 @@ where
     S: Serializable,
     A: Serializable,
 {
+    let deserialize_start_time = Instant::now();
+    
     let (header, module, message) = message.into_inner();
 
     if !authenticated {
@@ -72,6 +77,8 @@ where
             stub.push_application(header, m)?;
         }
     }
+    
+    metric_duration(COMM_DESERIALIZE_VERIFY_TIME_ID, deserialize_start_time.elapsed());
 
     Ok(())
 }

@@ -1,23 +1,25 @@
-use anyhow::Context;
 use std::sync::Arc;
+use std::time::Instant;
 
+use anyhow::Context;
 use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
+use log::{error, trace};
 use smallvec::SmallVec;
 
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::KeyPair;
-
 use atlas_common::node_id::NodeId;
 use atlas_common::prng::ThreadSafePrng;
 use atlas_common::quiet_unwrap;
-use log::{error, trace};
+use atlas_metrics::metrics::metric_duration;
 
-use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager};
+use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, StoredSerializedMessage, WireMessage};
+use crate::metric::{COMM_SERIALIZE_SIGN_TIME_ID, THREADPOOL_PASS_TIME_ID};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
@@ -255,7 +257,13 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
 
     let (send_to_me, send_tos) = SendTo::initialize_send_tos(conn_manager, shared, rng, targets);
 
+    let alloc_time = Instant::now();
+    
     atlas_common::threadpool::execute(move || {
+        metric_duration(THREADPOOL_PASS_TIME_ID, alloc_time.elapsed());
+        
+        let serialize_time_start = Instant::now();
+        
         let mut buf = Vec::new();
 
         let message_module = message.get_module();
@@ -306,6 +314,8 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
                 }
             });
         }
+
+        metric_duration(COMM_SERIALIZE_SIGN_TIME_ID, serialize_time_start.elapsed());
     });
 }
 

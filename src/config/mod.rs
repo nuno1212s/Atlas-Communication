@@ -57,6 +57,6 @@ pub struct UnpooledConnection {
 
 impl Default for UnpooledConnection {
     fn default() -> Self {
-        Self { channel_size: 100 }
+        Self { channel_size: 1024 }
     }
 }
