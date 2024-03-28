@@ -41,7 +41,7 @@ pub trait ModuleOutgoingStub<M> {
     fn broadcast(
         &self,
         message: M,
-        targets: impl Iterator<Item=NodeId>,
+        targets: impl Iterator<Item = NodeId>,
     ) -> std::result::Result<(), Vec<NodeId>>;
 
     /// Broadcast a signed message for all of the given targets
@@ -51,7 +51,7 @@ pub trait ModuleOutgoingStub<M> {
     fn broadcast_signed(
         &self,
         message: M,
-        target: impl Iterator<Item=NodeId>,
+        target: impl Iterator<Item = NodeId>,
     ) -> std::result::Result<(), Vec<NodeId>>;
 
     /// Serialize a message to a given target.
@@ -106,8 +106,8 @@ pub trait BatchedModuleIncomingStub<M> {
 
 /// A basic network stub
 pub trait NetworkStub<T>: Send + Sync
-    where
-        T: Serializable,
+where
+    T: Serializable,
 {
     /// The outgoing message handler.
     type Outgoing: ModuleOutgoingStub<T::Message>;
@@ -124,8 +124,8 @@ pub trait NetworkStub<T>: Send + Sync
 
 /// An extended network stub, with the incoming request handling stubs as well
 pub trait RegularNetworkStub<T>: NetworkStub<T>
-    where
-        T: Serializable,
+where
+    T: Serializable,
 {
     type Incoming: ModuleIncomingStub<T::Message>;
 
@@ -134,27 +134,28 @@ pub trait RegularNetworkStub<T>: NetworkStub<T>
 
 /// The batched network stub, with the incoming request handling stubs as well
 pub trait BatchedNetworkStub<T>: NetworkStub<T>
-    where
-        T: Serializable,
+where
+    T: Serializable,
 {
     type Incoming: BatchedModuleIncomingStub<T::Message>;
 
     fn incoming_stub(&self) -> &Self::Incoming;
 }
 
-type PeerCNNMng<NI, CN, R, O, S, A> = PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
+type PeerCNNMng<NI, CN, R, O, S, A> =
+    PeerConnectionManager<NI, CN, R, O, S, A, EnumLookupTable<R, O, S, A>>;
 
 /// In reality, this should all be macros, but I'm not into the macro scene
 /// And I can't take the time to learn it atm
 /// Reconfiguration stub
 /// TODO: Remove dependency on the network management, as it introduces un necessary BN generics
 pub struct ReconfigurationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     network_info: Arc<NI>,
     conn_manager: PeerCNNMng<NI, CN, R, O, S, A>,
@@ -164,20 +165,20 @@ pub struct ReconfigurationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> ReconfigurationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
-        CN: Clone,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
+    CN: Clone,
 {
     pub fn new<BN>(
         network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>,
         conn_controller: Arc<BNC>,
     ) -> Self
-        where
-            BN: Clone,
+    where
+        BN: Clone,
     {
         let end_point = network_management
             .conn_manager()
@@ -198,13 +199,13 @@ impl<NI, CN, BNC, R, O, S, A> ReconfigurationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> Clone for ReconfigurationStub<NI, CN, BNC, R, O, S, A>
-    where
-        A: Serializable,
-        O: Serializable,
-        R: Serializable,
-        S: Serializable,
-        BNC: NetworkConnectionController,
-        CN: Clone,
+where
+    A: Serializable,
+    O: Serializable,
+    R: Serializable,
+    S: Serializable,
+    BNC: NetworkConnectionController,
+    CN: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -218,14 +219,14 @@ impl<NI, CN, BNC, R, O, S, A> Clone for ReconfigurationStub<NI, CN, BNC, R, O, S
 }
 
 impl<NI, CN, BNC, R, O, S, A> NetworkStub<R> for ReconfigurationStub<NI, CN, BNC, R, O, S, A>
-    where
-        A: Serializable + 'static,
-        O: Serializable + 'static,
-        R: Serializable + 'static,
-        S: Serializable + 'static,
-        NI: NetworkInformationProvider,
-        CN: ByteNetworkStub + 'static,
-        BNC: NetworkConnectionController,
+where
+    A: Serializable + 'static,
+    O: Serializable + 'static,
+    R: Serializable + 'static,
+    S: Serializable + 'static,
+    NI: NetworkInformationProvider,
+    CN: ByteNetworkStub + 'static,
+    BNC: NetworkConnectionController,
 {
     type Outgoing = Self;
     type Connections = BNC;
@@ -247,12 +248,12 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<R> for ReconfigurationStub<NI, CN, BNC
 ///
 ///
 pub struct OperationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     network_info: Arc<NI>,
     conn_manager: PeerCNNMng<NI, CN, R, O, S, A>,
@@ -262,20 +263,20 @@ pub struct OperationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> OperationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     pub fn new<BN>(
         network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>,
         conn_controller: Arc<BNC>,
     ) -> Self
-        where
-            BN: Clone,
-            CN: Clone,
+    where
+        BN: Clone,
+        CN: Clone,
     {
         let end_point = network_management
             .conn_manager()
@@ -296,13 +297,13 @@ impl<NI, CN, BNC, R, O, S, A> OperationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> Clone for OperationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
-        CN: Clone,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
+    CN: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -316,14 +317,14 @@ impl<NI, CN, BNC, R, O, S, A> Clone for OperationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> NetworkStub<O> for OperationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable + 'static,
-        O: Serializable + 'static,
-        S: Serializable + 'static,
-        A: Serializable + 'static,
-        CN: ByteNetworkStub + 'static,
-        NI: NetworkInformationProvider,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable + 'static,
+    O: Serializable + 'static,
+    S: Serializable + 'static,
+    A: Serializable + 'static,
+    CN: ByteNetworkStub + 'static,
+    NI: NetworkInformationProvider,
+    BNC: NetworkConnectionController,
 {
     type Outgoing = Self;
     type Connections = BNC;
@@ -343,12 +344,12 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<O> for OperationStub<NI, CN, BNC, R, O
 
 /// State protocol stub
 pub struct StateProtocolStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     network_info: Arc<NI>,
     conn_manager: PeerCNNMng<NI, CN, R, O, S, A>,
@@ -358,20 +359,20 @@ pub struct StateProtocolStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> StateProtocolStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     pub fn new<BN>(
         network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>,
         conn_controller: Arc<BNC>,
     ) -> Self
-        where
-            BN: Clone,
-            CN: Clone,
+    where
+        BN: Clone,
+        CN: Clone,
     {
         let end_point = network_management
             .conn_manager()
@@ -393,13 +394,13 @@ impl<NI, CN, BNC, R, O, S, A> StateProtocolStub<NI, CN, BNC, R, O, S, A>
 
 //Clone impl
 impl<NI, CN, BNC, R, O, S, A> Clone for StateProtocolStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
-        CN: Clone,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
+    CN: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -413,14 +414,14 @@ impl<NI, CN, BNC, R, O, S, A> Clone for StateProtocolStub<NI, CN, BNC, R, O, S, 
 }
 
 impl<NI, CN, BNC, R, O, S, A> NetworkStub<S> for StateProtocolStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable + 'static,
-        O: Serializable + 'static,
-        S: Serializable + 'static,
-        A: Serializable + 'static,
-        NI: NetworkInformationProvider,
-        CN: ByteNetworkStub + 'static,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable + 'static,
+    O: Serializable + 'static,
+    S: Serializable + 'static,
+    A: Serializable + 'static,
+    NI: NetworkInformationProvider,
+    CN: ByteNetworkStub + 'static,
+    BNC: NetworkConnectionController,
 {
     type Outgoing = Self;
     type Connections = BNC;
@@ -440,12 +441,12 @@ impl<NI, CN, BNC, R, O, S, A> NetworkStub<S> for StateProtocolStub<NI, CN, BNC, 
 
 /// Application stub
 pub struct ApplicationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     network_info: Arc<NI>,
     conn_manager: PeerCNNMng<NI, CN, R, O, S, A>,
@@ -455,20 +456,20 @@ pub struct ApplicationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> ApplicationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
 {
     pub fn new<BN>(
         network_management: &NetworkManagement<NI, CN, BN, R, O, S, A>,
         conn_controller: Arc<BNC>,
     ) -> Self
-        where
-            BN: Clone,
-            CN: Clone,
+    where
+        BN: Clone,
+        CN: Clone,
     {
         let end_point = network_management
             .conn_manager()
@@ -489,13 +490,13 @@ impl<NI, CN, BNC, R, O, S, A> ApplicationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> Clone for ApplicationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        BNC: NetworkConnectionController,
-        CN: Clone,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    BNC: NetworkConnectionController,
+    CN: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -509,14 +510,14 @@ impl<NI, CN, BNC, R, O, S, A> Clone for ApplicationStub<NI, CN, BNC, R, O, S, A>
 }
 
 impl<NI, CN, BNC, R, O, S, A> NetworkStub<A> for ApplicationStub<NI, CN, BNC, R, O, S, A>
-    where
-        R: Serializable + 'static,
-        O: Serializable + 'static,
-        S: Serializable + 'static,
-        A: Serializable + 'static,
-        NI: NetworkInformationProvider,
-        CN: ByteNetworkStub + 'static,
-        BNC: NetworkConnectionController,
+where
+    R: Serializable + 'static,
+    O: Serializable + 'static,
+    S: Serializable + 'static,
+    A: Serializable + 'static,
+    NI: NetworkInformationProvider,
+    CN: ByteNetworkStub + 'static,
+    BNC: NetworkConnectionController,
 {
     type Outgoing = Self;
     type Connections = BNC;

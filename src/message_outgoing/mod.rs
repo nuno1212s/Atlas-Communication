@@ -15,8 +15,8 @@ use atlas_common::prng::ThreadSafePrng;
 use atlas_common::quiet_unwrap;
 use atlas_metrics::metrics::metric_duration;
 
-use crate::byte_stub::{ByteNetworkStub, DispatchError, PeerConnectionManager};
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
+use crate::byte_stub::{ByteNetworkStub, DispatchError, PeerConnectionManager};
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, StoredSerializedMessage, WireMessage};
 use crate::metric::{COMM_SERIALIZE_SIGN_TIME_ID, THREADPOOL_PASS_TIME_ID};
@@ -30,11 +30,11 @@ type SendTos<CN, R, O, S, A> = SmallVec<[SendTo<CN, R, O, S, A>; NODE_QUORUM_SIZ
 
 #[derive(Getters, CopyGetters)]
 pub struct SendTo<CN, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
 {
     from: NodeId,
     #[get = "pub"]
@@ -47,12 +47,12 @@ pub struct SendTo<CN, R, O, S, A>
 }
 
 impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
-    where
-        R: Serializable,
-        O: Serializable,
-        S: Serializable,
-        A: Serializable,
-        CN: Clone,
+where
+    R: Serializable,
+    O: Serializable,
+    S: Serializable,
+    A: Serializable,
+    CN: Clone,
 {
     pub fn initialize_send_tos_serialized<NI, L>(
         conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
@@ -60,9 +60,9 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
         rng: &Arc<ThreadSafePrng>,
         target: NodeId,
     ) -> (Option<Self>, Option<Self>)
-        where
-            L: Clone + Send,
-            NI: NetworkInformationProvider,
+    where
+        L: Clone + Send,
+        NI: NetworkInformationProvider,
     {
         let mut send_to_me = None;
         let mut send_tos = None;
@@ -106,11 +106,11 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
         conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
         shared: Option<&Arc<KeyPair>>,
         rng: &Arc<ThreadSafePrng>,
-        targets: impl Iterator<Item=NodeId>,
+        targets: impl Iterator<Item = NodeId>,
     ) -> Self::InitializedSendTos
-        where
-            L: LookupTable<R, O, S, A>,
-            NI: NetworkInformationProvider,
+    where
+        L: LookupTable<R, O, S, A>,
+        NI: NetworkInformationProvider,
     {
         let mut send_to_me = None;
         let mut send_tos = Some(SmallVec::new());
@@ -157,10 +157,8 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     pub type TypedMessage = (ModMessageWrapped<R, O, S, A>, Buf, Digest);
     pub type SerializedMessage = (MessageModule, Buf, Digest);
 
-    pub fn value(
-        self,
-        msg: Either<Self::TypedMessage, Self::SerializedMessage>,
-    ) where
+    pub fn value(self, msg: Either<Self::TypedMessage, Self::SerializedMessage>)
+    where
         CN: ByteNetworkStub + 'static,
     {
         let key_pair = self.shared.as_deref();
@@ -199,8 +197,8 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
     }
 
     pub fn value_ser(self, msg: StoredSerializedMessage<ModMessageWrapped<R, O, S, A>>)
-        where
-            CN: ByteNetworkStub + 'static,
+    where
+        CN: ByteNetworkStub + 'static,
     {
         match (self.peer, msg) {
             (
@@ -222,7 +220,7 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
                 let module = msg.get_module();
 
                 let wire_msg = WireMessage::from_parts(header, module, buf).unwrap();
-                
+
                 dispatch_message(stub, wire_msg, self.to);
             }
         }
@@ -230,24 +228,28 @@ impl<CN, R, O, S, A> SendTo<CN, R, O, S, A>
 }
 
 fn dispatch_message<CN>(stub: CN, message: WireMessage, to: NodeId)
-    where CN: ByteNetworkStub + 'static {
+where
+    CN: ByteNetworkStub + 'static,
+{
     dispatch_message_circuit(stub, message, to, 0);
 }
 
 const CIRCUIT_BREAKER_ATTEMPTS: usize = 5;
 
 fn dispatch_message_circuit<CN>(stub: CN, message: WireMessage, to: NodeId, circuits: usize)
-    where
-        CN: ByteNetworkStub + 'static
+where
+    CN: ByteNetworkStub + 'static,
 {
     if let Err(dispatch_error) = stub.dispatch_message(message) {
         match dispatch_error {
             DispatchError::CouldNotDispatchTryLater(message) => {
                 if circuits > CIRCUIT_BREAKER_ATTEMPTS {
-                    error!("Failed to send message to node {:?} after {} attempts, blocking", to, circuits);
+                    error!(
+                        "Failed to send message to node {:?} after {} attempts, blocking",
+                        to, circuits
+                    );
 
-                    stub
-                        .dispatch_blocking(message)
+                    stub.dispatch_blocking(message)
                         .context("Failed to send message to node")
                         .unwrap();
 
@@ -255,19 +257,26 @@ fn dispatch_message_circuit<CN>(stub: CN, message: WireMessage, to: NodeId, circ
                 }
 
                 warn!("Failed to send message to node {:?} immediately, retrying for the {} time with a circuit breaker pattern", to, circuits);
-                
+
                 handle_failed_message_delivery_circuit(stub, message, to, circuits + 1);
             }
             DispatchError::InternalError(err) => {
-                error!("Internal error while sending message to node {:?}: {:?}", to, err);
+                error!(
+                    "Internal error while sending message to node {:?}: {:?}",
+                    to, err
+                );
             }
         }
     };
 }
 
-fn handle_failed_message_delivery_circuit<CN>(stub: CN, wire_msg: WireMessage, to: NodeId, circuits_made: usize)
-    where
-        CN: ByteNetworkStub + 'static
+fn handle_failed_message_delivery_circuit<CN>(
+    stub: CN,
+    wire_msg: WireMessage,
+    to: NodeId,
+    circuits_made: usize,
+) where
+    CN: ByteNetworkStub + 'static,
 {
     atlas_common::threadpool::execute(move || {
         dispatch_message_circuit(stub, wire_msg, to, circuits_made);
@@ -279,7 +288,7 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
     shared: Option<&Arc<KeyPair>>,
     rng: &Arc<ThreadSafePrng>,
     message: ModMessageWrapped<R, O, S, A>,
-    targets: impl Iterator<Item=NodeId>,
+    targets: impl Iterator<Item = NodeId>,
 ) where
     CN: ByteNetworkStub + 'static,
     R: Serializable + 'static,

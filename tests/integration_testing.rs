@@ -6,7 +6,10 @@ use atlas_common::peer_addr::PeerAddr;
 use atlas_common::{channel, error};
 use atlas_communication::byte_stub::connections::NetworkConnectionController;
 use atlas_communication::byte_stub::incoming::PeerIncomingConnection;
-use atlas_communication::byte_stub::{ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, DispatchError, PeerConnectionManager};
+use atlas_communication::byte_stub::{
+    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, DispatchError,
+    PeerConnectionManager,
+};
 use atlas_communication::lookup_table::EnumLookupTable;
 use atlas_communication::message::{Header, WireMessage};
 use atlas_communication::reconfiguration;
@@ -143,7 +146,7 @@ impl ByteNetworkStub for MockByteStub {
         self.0
             .send(message)
             .context("Failed to send message to another node")?;
-        
+
         Ok(DispatchError::Sucessfull)
     }
 }

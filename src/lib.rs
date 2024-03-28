@@ -17,9 +17,7 @@ use crate::lookup_table::EnumLookupTable;
 use crate::network_information::initialize_network_info_handle;
 use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
 use crate::serialization::Serializable;
-use crate::stub::{
-    ApplicationStub, OperationStub, ReconfigurationStub, StateProtocolStub,
-};
+use crate::stub::{ApplicationStub, OperationStub, ReconfigurationStub, StateProtocolStub};
 
 pub mod byte_stub;
 pub mod config;

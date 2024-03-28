@@ -87,8 +87,8 @@ pub struct ConnectedPeersPool<T: Send> {
 }
 
 impl<T> ConnectedPeersGroup<T>
-    where
-        T: Send + 'static,
+where
+    T: Send + 'static,
 {
     pub fn new(
         client_pool_config: ClientPoolConfig,
@@ -211,8 +211,8 @@ impl<T> ConnectedPeersGroup<T>
 }
 
 impl<T> ConnectedPeersPool<T>
-    where
-        T: Send + 'static,
+where
+    T: Send + 'static,
 {
     //We mark the owner as static since if the pool is active then
     //The owner also has to be active

@@ -1,9 +1,9 @@
-use std::time::Instant;
 use anyhow::Error;
 use atlas_common::Err;
-use log::warn;
-use thiserror::Error;
 use atlas_metrics::metrics::metric_duration;
+use log::warn;
+use std::time::Instant;
+use thiserror::Error;
 
 use crate::lookup_table::{
     LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,
@@ -31,7 +31,7 @@ where
     A: Serializable,
 {
     let deserialize_start_time = Instant::now();
-    
+
     let (header, module, message) = message.into_inner();
 
     if !authenticated {
@@ -77,8 +77,11 @@ where
             stub.push_application(header, m)?;
         }
     }
-    
-    metric_duration(COMM_DESERIALIZE_VERIFY_TIME_ID, deserialize_start_time.elapsed());
+
+    metric_duration(
+        COMM_DESERIALIZE_VERIFY_TIME_ID,
+        deserialize_start_time.elapsed(),
+    );
 
     Ok(())
 }
