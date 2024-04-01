@@ -249,6 +249,10 @@ where
                         to, circuits
                     );
 
+                    //TODO: If there are byzantine replicas reading requests slowly,
+                    // this can start to bottleneck the system. We should consider
+                    // throwing messages away if they are not delivered after a certain
+                    // number of attempts.
                     stub.dispatch_blocking(message)
                         .context("Failed to send message to node")
                         .unwrap();
