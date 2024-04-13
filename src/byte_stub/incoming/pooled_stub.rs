@@ -2,7 +2,7 @@
 
 use crate::config::ClientPoolConfig;
 use crate::message::StoredMessage;
-use crate::metric::CLIENT_POOL_COLLECT_TIME_ID;
+use crate::metric::{CLIENT_POOL_COLLECT_TIME_ID, CLIENT_POOL_SLEEP_TIME_ID};
 use crate::stub::BatchedModuleIncomingStub;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::node_id::NodeId;
@@ -282,7 +282,11 @@ where
                         let sleep_micros =
                             fastrand::u64(three_quarters_sleep..=five_quarters_sleep);
 
+                        let sleep_start_time = Instant::now();
+                        
                         std::thread::sleep(Duration::from_micros(sleep_micros));
+                        
+                        metric_duration(CLIENT_POOL_SLEEP_TIME_ID, sleep_start_time.elapsed());
                     }
 
                     // backoff.spin();

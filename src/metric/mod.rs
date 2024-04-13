@@ -1,5 +1,5 @@
 use atlas_metrics::metrics::MetricKind;
-use atlas_metrics::MetricRegistry;
+use atlas_metrics::{MetricLevel, MetricRegistry};
 
 pub(crate) const COMM_SERIALIZE_SIGN_TIME: &str = "COMM_SERIALIZE_AND_SIGN_TIME";
 pub(crate) const COMM_SERIALIZE_SIGN_TIME_ID: usize = 402;
@@ -15,6 +15,9 @@ pub(crate) const CLIENT_POOL_BATCH_PASSING_TIME_ID: usize = 405;
 
 pub(crate) const THREADPOOL_PASS_TIME: &str = "THREADPOOL_PASS_TIME";
 pub(crate) const THREADPOOL_PASS_TIME_ID: usize = 408;
+
+pub(crate) const CLIENT_POOL_SLEEP_TIME: &str = "CLIENT_POOL_SLEEP_TIME";
+pub(crate) const CLIENT_POOL_SLEEP_TIME_ID: usize = 409;
 
 pub fn metrics() -> Vec<MetricRegistry> {
     vec![
@@ -46,6 +49,13 @@ pub fn metrics() -> Vec<MetricRegistry> {
             THREADPOOL_PASS_TIME_ID,
             THREADPOOL_PASS_TIME.to_string(),
             MetricKind::Duration,
+        )
+            .into(),
+        (
+            CLIENT_POOL_SLEEP_TIME_ID,
+            CLIENT_POOL_SLEEP_TIME.to_string(),
+            MetricKind::Duration,
+            MetricLevel::Trace,
         )
             .into(),
     ]

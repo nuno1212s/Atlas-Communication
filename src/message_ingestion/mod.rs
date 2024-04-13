@@ -1,5 +1,6 @@
 use anyhow::Error;
 use atlas_common::Err;
+use atlas_common::node_id::NodeId;
 use atlas_metrics::metrics::metric_duration;
 use log::warn;
 use std::time::Instant;
@@ -38,7 +39,7 @@ where
         match module {
             MessageModule::Reconfiguration => {}
             _ => {
-                return Err!(IngestMessageError::UnAuthenticatedMessage(module));
+                return Err!(IngestMessageError::UnAuthenticatedMessage(module, header.from()));
             }
         }
     } else if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
@@ -92,6 +93,6 @@ pub enum IngestMessageError {
     DeserializationError(#[from] Error),
     #[error("Failed to process wire message: {0:?}")]
     SignatureVerificationFailure(#[from] IngestionError),
-    #[error("Attempted to process message without authenticated flag, but message was not a reconfiguration message (module: {0:?})")]
-    UnAuthenticatedMessage(MessageModule),
+    #[error("Attempted to process message without authenticated flag, but message was not a reconfiguration message (module: {0:?}, node {1:?})")]
+    UnAuthenticatedMessage(MessageModule, NodeId),
 }
