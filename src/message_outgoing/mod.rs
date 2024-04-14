@@ -5,7 +5,7 @@ use anyhow::Context;
 use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
-use log::{error, trace, warn};
+use tracing::{error, trace, warn};
 use smallvec::SmallVec;
 
 use atlas_common::crypto::hash::Digest;

@@ -1,4 +1,4 @@
-use log::error;
+use tracing::error;
 
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;

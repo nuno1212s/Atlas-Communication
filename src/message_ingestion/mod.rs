@@ -1,8 +1,8 @@
 use anyhow::Error;
-use atlas_common::Err;
 use atlas_common::node_id::NodeId;
+use atlas_common::Err;
 use atlas_metrics::metrics::metric_duration;
-use log::warn;
+use tracing::warn;
 use std::time::Instant;
 use thiserror::Error;
 
@@ -39,7 +39,10 @@ where
         match module {
             MessageModule::Reconfiguration => {}
             _ => {
-                return Err!(IngestMessageError::UnAuthenticatedMessage(module, header.from()));
+                return Err!(IngestMessageError::UnAuthenticatedMessage(
+                    module,
+                    header.from()
+                ));
             }
         }
     } else if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {

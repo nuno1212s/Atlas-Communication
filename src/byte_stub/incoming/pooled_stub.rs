@@ -9,7 +9,7 @@ use atlas_common::node_id::NodeId;
 use atlas_common::Err;
 
 use atlas_metrics::metrics::metric_duration;
-use log::{debug, error, info};
+use tracing::{debug, error, info};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -283,9 +283,9 @@ where
                             fastrand::u64(three_quarters_sleep..=five_quarters_sleep);
 
                         let sleep_start_time = Instant::now();
-                        
+
                         std::thread::sleep(Duration::from_micros(sleep_micros));
-                        
+
                         metric_duration(CLIENT_POOL_SLEEP_TIME_ID, sleep_start_time.elapsed());
                     }
 

@@ -49,10 +49,16 @@ impl Default for ClientPoolConfig {
     }
 }
 
-#[derive(CopyGetters)]
+#[derive(CopyGetters, Debug)]
 pub struct UnpooledConnection {
     #[get_copy = "pub"]
     channel_size: usize,
+}
+
+impl UnpooledConnection {
+    pub fn new(channel_size: usize) -> Self {
+        Self { channel_size }
+    }
 }
 
 impl Default for UnpooledConnection {
