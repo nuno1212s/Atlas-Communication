@@ -2,9 +2,9 @@ use anyhow::Error;
 use atlas_common::node_id::NodeId;
 use atlas_common::Err;
 use atlas_metrics::metrics::metric_duration;
-use tracing::warn;
 use std::time::Instant;
 use thiserror::Error;
+use tracing::warn;
 
 use crate::lookup_table::{
     LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,

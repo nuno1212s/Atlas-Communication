@@ -13,10 +13,10 @@ use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::{channel, quiet_unwrap};
 use enum_map::EnumMap;
-use tracing::{error, info};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
+use tracing::{error, info};
 
 pub(crate) mod pooled_stub;
 pub(crate) mod unpooled_stub;
@@ -403,16 +403,18 @@ where
         },
         NodeType::Client => {
             let config = UnpooledConnection::new(1024);
-            
-            info!("Initializing stub controller for client node with config {:?}", config);
-            
+
+            info!(
+                "Initializing stub controller for client node with config {:?}",
+                config
+            );
+
             // When we are clients we use all unpooled stubs (since we don't have to handle a lot of throughput)
             match message_mod {
                 MessageModule::Reconfiguration
                 | MessageModule::Protocol
                 | MessageModule::StateProtocol
                 | MessageModule::Application => {
-                    
                     //TODO: We should receive (maybe individual?) configs as arguments, not use the default
                     let (unpooled_stub, rx) =
                         unpooled_stub::UnpooledStubManagement::initialize_controller(

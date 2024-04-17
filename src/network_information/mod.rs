@@ -4,7 +4,7 @@ use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 
-use crate::reconfiguration::{NetworkUpdateMessage, ReconfigurationMessageHandler};
+use crate::reconfiguration::{NetworkReconfigurationCommunication, ReconfigurationNetworkUpdateMessage};
 
 /// The trait required for a connection manager to be usable with the networking information
 pub(crate) trait PendingConnectionManagement: Send {
@@ -22,7 +22,7 @@ pub(crate) trait PendingConnectionManagement: Send {
 
 /// Initialize the network information thread
 pub(crate) fn initialize_network_info_handle<PM>(
-    reconfiguration_message_handler: ReconfigurationMessageHandler,
+    reconfiguration_message_handler: NetworkReconfigurationCommunication,
     connection_handler: PM,
 ) where
     PM: PendingConnectionManagement + 'static,
@@ -34,7 +34,7 @@ pub(crate) fn initialize_network_info_handle<PM>(
                 match reconfiguration_message_handler.receive_network_update() {
                     Ok(message) => {
                         match message {
-                            NetworkUpdateMessage::NodeConnectionPermitted(node, node_type, key) => {
+                            ReconfigurationNetworkUpdateMessage::NodeConnectionPermitted(node, node_type, key) => {
                                 if connection_handler.has_pending_connection(&node) {
                                     if let Err(err) = connection_handler.upgrade_connection_to_known(&node, node_type, key) {
                                         error!("Failed to upgrade connection to node {:?} of type {:?}. Error: {:?}", node, node_type, err);

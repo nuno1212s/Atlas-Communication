@@ -15,7 +15,7 @@ use crate::byte_stub::{
 };
 use crate::lookup_table::EnumLookupTable;
 use crate::network_information::initialize_network_info_handle;
-use crate::reconfiguration::{NetworkInformationProvider, ReconfigurationMessageHandler};
+use crate::reconfiguration::{NetworkInformationProvider, NetworkReconfigurationCommunication};
 use crate::serialization::Serializable;
 use crate::stub::{ApplicationStub, OperationStub, ReconfigurationStub, StateProtocolStub};
 
@@ -87,7 +87,7 @@ where
     pub fn initialize(
         network_info: Arc<NI>,
         config: BN::Config,
-        reconfiguration_msg: ReconfigurationMessageHandler,
+        reconfiguration_msg: NetworkReconfigurationCommunication,
     ) -> Result<Arc<Self>>
     where
         BN: ByteNetworkControllerInit<

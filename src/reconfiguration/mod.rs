@@ -10,6 +10,7 @@ use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::peer_addr::PeerAddr;
+use atlas_common::Err;
 
 #[derive(Clone, Getters, CopyGetters, Debug)]
 #[cfg_attr(
@@ -45,45 +46,106 @@ pub trait NetworkInformationProvider: Send + Sync {
 /// network update telling us about this new node. In this pending state we will
 /// only receive reconfiguration messages from this node.
 pub trait ReconfigurationNetworkUpdate {
-    fn send_reconfiguration_update(&self, update: NetworkUpdateMessage) -> Result<()>;
+    fn send_reconfiguration_update(
+        &self,
+        update: ReconfigurationNetworkUpdateMessage,
+    ) -> Result<()>;
 }
 
 #[derive(Clone)]
-pub enum NetworkUpdateMessage {
+pub enum ReconfigurationNetworkUpdateMessage {
     NodeConnectionPermitted(NodeId, NodeType, PublicKey),
 }
 
-#[derive(Getters, Clone)]
-pub struct ReconfigurationMessageHandler {
-    #[get = "pub"]
-    update_channel_tx: ChannelSyncTx<NetworkUpdateMessage>,
-    #[get = "pub"]
-    update_channel_rx: ChannelSyncRx<NetworkUpdateMessage>,
+#[derive(Clone)]
+pub enum NetworkUpdatedMessage {
+    // We have lost all connection to a given node
+    NodeDisconnected(NodeId),
+    // The connection to a given node is faulty (e.g. One of the connections failed, etc)
+    ConnectionFaulty(NodeId),
 }
 
-impl ReconfigurationMessageHandler {
-    pub fn initialize() -> Self {
-        let (network_updates_tx, network_updates_rx) =
-            channel::new_bounded_sync(100, Some("Reconfig update message"));
+/// The communication handle for communication between
+/// the reconfiguration protocol and the network protocols.
+///
+/// This handle is made for the Reconfiguration protocol side
+#[derive(Clone)]
+pub struct ReconfigurationNetworkCommunication {
+    network_update_sender: ChannelSyncTx<ReconfigurationNetworkUpdateMessage>,
 
-        ReconfigurationMessageHandler {
-            update_channel_tx: network_updates_tx,
-            update_channel_rx: network_updates_rx,
-        }
+    network_update_receiver: ChannelSyncRx<NetworkUpdatedMessage>,
+}
+
+/// The communication handle for communication between
+/// the network protocols and the reconfiguration protocol.
+///
+/// This handle is made for the network protocol side
+#[derive(Clone)]
+pub struct NetworkReconfigurationCommunication {
+    network_update_receiver: ChannelSyncRx<ReconfigurationNetworkUpdateMessage>,
+
+    network_update_sender: ChannelSyncTx<NetworkUpdatedMessage>,
+}
+
+impl ReconfigurationNetworkUpdate for ReconfigurationNetworkCommunication {
+    fn send_reconfiguration_update(
+        &self,
+        update: ReconfigurationNetworkUpdateMessage,
+    ) -> Result<()> {
+        self.network_update_sender.send(update)
     }
 }
 
-impl ReconfigurationMessageHandler {
-    pub fn receive_network_update(&self) -> Result<NetworkUpdateMessage> {
-        Ok(self.update_channel_rx.recv().unwrap())
+impl ReconfigurationNetworkCommunication {
+    pub fn receive_network_update(&self) -> Result<NetworkUpdatedMessage> {
+        self.network_update_receiver.recv()
     }
 
     pub fn try_receive_network_update(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<Option<NetworkUpdateMessage>> {
+    ) -> Result<Option<NetworkUpdatedMessage>> {
+        match timeout {
+            None => match self.network_update_receiver.try_recv() {
+                Ok(msg) => Ok(Some(msg)),
+                Err(err) => match err {
+                    TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
+                    TryRecvError::ChannelDc => {
+                        Err!(err)
+                    }
+                },
+            },
+            Some(timeout) => match self.network_update_receiver.recv_timeout(timeout) {
+                Ok(msg) => Ok(Some(msg)),
+                Err(err) => match err {
+                    TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
+                    TryRecvError::ChannelDc => {
+                        Err!(err)
+                    }
+                },
+            },
+        }
+    }
+}
+
+impl NetworkReconfigurationCommunication {
+    
+    /// Receive a network update from the reconfiguration protocol
+    /// 
+    /// This method will bro block until a network update is received
+    pub fn receive_network_update(&self) -> Result<ReconfigurationNetworkUpdateMessage> {
+        self.network_update_receiver.recv()
+    }
+
+    /// Try to receive a network update from the reconfiguration protocol
+    /// 
+    /// This method will return immediately with an `Ok(None)` if no network update is available
+    pub fn try_receive_network_update(
+        &self,
+        timeout: Option<Duration>,
+    ) -> Result<Option<ReconfigurationNetworkUpdateMessage>> {
         if let Some(timeout) = timeout {
-            match self.update_channel_rx.recv_timeout(timeout) {
+            match self.network_update_receiver.recv_timeout(timeout) {
                 Ok(msg) => Ok(Some(msg)),
                 Err(err) => match err {
                     TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
@@ -93,7 +155,7 @@ impl ReconfigurationMessageHandler {
                 },
             }
         } else {
-            match self.update_channel_rx.try_recv() {
+            match self.network_update_receiver.try_recv() {
                 Ok(msg) => Ok(Some(msg)),
                 Err(err) => match err {
                     TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
@@ -104,6 +166,32 @@ impl ReconfigurationMessageHandler {
             }
         }
     }
+}
+
+/// Initialize the network reconfiguration communication channels
+///
+/// This function will return a tuple of the network reconfiguration communication handles
+pub fn initialize_network_reconfiguration_comms(
+    channel_capacity: usize,
+) -> (
+    NetworkReconfigurationCommunication,
+    ReconfigurationNetworkCommunication,
+) {
+    let (network_tx, network_rx) =
+        channel::new_bounded_sync(channel_capacity, Some("Network reconfig message channel"));
+    let (reconfig_tx, reconfig_rx) =
+        channel::new_bounded_sync(channel_capacity, Some("Reconfig network message channel"));
+
+    (
+        NetworkReconfigurationCommunication {
+            network_update_receiver: network_rx,
+            network_update_sender: reconfig_tx,
+        },
+        ReconfigurationNetworkCommunication {
+            network_update_receiver: reconfig_rx,
+            network_update_sender: network_tx,
+        },
+    )
 }
 
 impl NodeInfo {
@@ -119,11 +207,5 @@ impl NodeInfo {
             public_key,
             addr,
         }
-    }
-}
-
-impl ReconfigurationNetworkUpdate for ReconfigurationMessageHandler {
-    fn send_reconfiguration_update(&self, update: NetworkUpdateMessage) -> Result<()> {
-        self.update_channel_tx.send(update)
     }
 }

@@ -9,12 +9,12 @@ use atlas_common::node_id::NodeId;
 use atlas_common::Err;
 
 use atlas_metrics::metrics::metric_duration;
-use tracing::{debug, error, info};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
+use tracing::{debug, error, info};
 
 pub struct PooledStubOutput<M>(ChannelSyncRx<ClientRqBatchOutput<M>>);
 
