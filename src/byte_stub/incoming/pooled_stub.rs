@@ -30,7 +30,7 @@ impl<M> From<ChannelSyncRx<ClientRqBatchOutput<M>>> for PooledStubOutput<M> {
     }
 }
 
-pub type ClientRqBatchOutput<T> = (Vec<T>, Instant);
+pub type ClientRqBatchOutput<T> = Vec<T>;
 
 pub type ClientPeer<T> = Arc<ConnectedClientPeer<T>>;
 
@@ -272,7 +272,7 @@ where
 
                     if !vec.is_empty() {
                         self.batch_transmission
-                            .send_return((vec, Instant::now()))
+                            .send_return(vec)
                             .expect("Failed to send proposed batch");
 
                         // Sleep for a determined amount of time to allow clients to send requests
@@ -352,13 +352,13 @@ where
 
         let start_point = fastrand::usize(0..connected_peers.len());
 
-        let ind_limit = usize::MAX;
-
         let start_time = Instant::now();
 
         let mut replacement_vec = Vec::with_capacity(self.owner.per_client_cache);
 
-        for index in 0..ind_limit {
+        let mut collected_requests_per_revolution = 0;
+
+        for index in 0..usize::MAX {
             let client = &connected_peers[(start_point + index) % connected_peers.len()];
 
             if client.is_dc() {
@@ -380,13 +380,16 @@ where
                 }
             };
 
+            collected_requests_per_revolution += rqs_dumped.len();
+
             batch.append(&mut rqs_dumped);
 
             //The previous vec is now the new vec of the next node
             replacement_vec = rqs_dumped;
 
-            if index % connected_peers.len() == 0 {
+            if index > 0 && index % connected_peers.len() == 0 {
                 //We have done a full circle on the requests
+                collected_requests_per_revolution = 0;
 
                 if batch.len() >= batch_target_size {
                     //We only check on each complete revolution since if we didn't do that
@@ -397,7 +400,8 @@ where
                 } else {
                     let current_time = Instant::now();
 
-                    if current_time.duration_since(start_time).as_micros()
+                    let collection_time = current_time.duration_since(start_time).as_micros();
+                    if collection_time
                         >= self.batch_timeout_micros as u128
                     {
                         //Check if a given amount of time limit has passed, to prevent us getting
@@ -405,7 +409,13 @@ where
                         break;
                     }
 
-                    std::thread::yield_now();
+                    if collected_requests_per_revolution == 0 {
+                        let time_until_timeout = self.batch_timeout_micros - collection_time as u64;
+
+                        std::thread::sleep(Duration::from_micros(time_until_timeout / 2));
+                    } else {
+                        std::thread::yield_now();
+                    }
                 }
             }
         }
@@ -517,9 +527,21 @@ pub enum SendPeerError {
     AttemptToPushClientMessageToReplicaConn(NodeId),
 }
 
-impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<StoredMessage<M>> {
+impl<M> AsRef<ChannelSyncRx<Vec<StoredMessage<M>>>> for PooledStubOutput<StoredMessage<M>>
+where
+    M: Send + Clone,
+{
+    fn as_ref(&self) -> &ChannelSyncRx<Vec<StoredMessage<M>>> {
+        &self.0
+    }
+}
+
+impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<StoredMessage<M>>
+where
+    M: Send + Clone,
+{
     fn receive_messages(&self) -> atlas_common::error::Result<Vec<StoredMessage<M>>> {
-        self.0.recv().map(|(vec, _)| vec)
+        self.0.recv()
     }
 
     fn try_receive_messages(
@@ -528,7 +550,7 @@ impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<StoredMessage<M>> {
     ) -> atlas_common::error::Result<Option<Vec<StoredMessage<M>>>> {
         match timeout {
             None => match self.0.try_recv() {
-                Ok(message) => Ok(Some(message.0)),
+                Ok(message) => Ok(Some(message)),
                 Err(err) => match err {
                     TryRecvError::ChannelEmpty => Ok(None),
                     TryRecvError::ChannelDc | TryRecvError::Timeout => {
@@ -537,7 +559,7 @@ impl<M> BatchedModuleIncomingStub<M> for PooledStubOutput<StoredMessage<M>> {
                 },
             },
             Some(duration) => match self.0.recv_timeout(duration) {
-                Ok(message) => Ok(Some(message.0)),
+                Ok(message) => Ok(Some(message)),
                 Err(err) => match err {
                     TryRecvError::ChannelEmpty | TryRecvError::Timeout => Ok(None),
                     TryRecvError::ChannelDc => {

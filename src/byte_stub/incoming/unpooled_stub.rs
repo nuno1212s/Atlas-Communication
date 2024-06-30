@@ -73,6 +73,15 @@ impl<M> Clone for UnpooledStubRX<M> {
     }
 }
 
+impl<T> AsRef<ChannelSyncRx<StoredMessage<T>>> for UnpooledStubRX<StoredMessage<T>>
+where
+    T: Send,
+{
+    fn as_ref(&self) -> &ChannelSyncRx<StoredMessage<T>> {
+        &self.rx
+    }
+}
+
 impl<T> ModuleIncomingStub<T> for UnpooledStubRX<StoredMessage<T>>
 where
     T: Send,

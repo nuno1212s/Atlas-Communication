@@ -198,7 +198,7 @@ impl NodeInfo {
         node_id: NodeId,
         node_type: NodeType,
         public_key: PublicKey,
-        addr: PeerAddr
+        addr: PeerAddr,
     ) -> Self {
         NodeInfo {
             node_id,

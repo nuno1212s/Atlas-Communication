@@ -4,7 +4,9 @@ use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 
-use crate::reconfiguration::{NetworkReconfigurationCommunication, ReconfigurationNetworkUpdateMessage};
+use crate::reconfiguration::{
+    NetworkReconfigurationCommunication, ReconfigurationNetworkUpdateMessage,
+};
 
 /// The trait required for a connection manager to be usable with the networking information
 pub(crate) trait PendingConnectionManagement: Send {

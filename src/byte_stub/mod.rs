@@ -3,19 +3,19 @@ use std::sync::{Arc, Mutex};
 
 use std::time::Duration;
 
-use anyhow::anyhow;
-use enum_map::EnumMap;
-use getset::{CopyGetters, Getters};
-use strum::IntoEnumIterator;
-use thiserror::Error;
-
 use crate::byte_stub::connections::NetworkConnectionController;
 use crate::network_information::PendingConnectionManagement;
+use anyhow::anyhow;
+use atlas_common::channel::ChannelSyncRx;
 use atlas_common::collections::HashMap;
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
+use enum_map::EnumMap;
+use getset::{CopyGetters, Getters};
+use strum::IntoEnumIterator;
+use thiserror::Error;
 
 use crate::byte_stub::incoming::{
     pooled_stub, unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable,
@@ -619,6 +619,30 @@ where
     }
 }
 
+impl<M> AsRef<ChannelSyncRx<StoredMessage<M>>> for StubEndpoint<M>
+where
+    M: Send + Clone,
+{
+    fn as_ref(&self) -> &ChannelSyncRx<StoredMessage<M>> {
+        match self {
+            StubEndpoint::Unpooled(unpooled_stub) => unpooled_stub.as_ref(),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<M> AsRef<ChannelSyncRx<Vec<StoredMessage<M>>>> for StubEndpoint<M>
+where
+    M: Send + Clone,
+{
+    fn as_ref(&self) -> &ChannelSyncRx<Vec<StoredMessage<M>>> {
+        match self {
+            StubEndpoint::Pooled(pooled_stub) => pooled_stub.as_ref(),
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl<M> ModuleIncomingStub<M> for StubEndpoint<M>
 where
     M: Send + Clone,
@@ -647,7 +671,7 @@ where
 
 impl<M> BatchedModuleIncomingStub<M> for StubEndpoint<M>
 where
-    M: Send,
+    M: Send + Clone,
 {
     fn receive_messages(&self) -> Result<Vec<StoredMessage<M>>> {
         match &self {

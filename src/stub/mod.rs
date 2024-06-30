@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
+use crate::byte_stub::connections::NetworkConnectionController;
+use atlas_common::channel::ChannelSyncRx;
 use std::sync::Arc;
 use std::time::Duration;
-
-use crate::byte_stub::connections::NetworkConnectionController;
 
 use crate::byte_stub::{ByteNetworkStub, PeerConnectionManager, StubEndpoint};
 use crate::lookup_table::{EnumLookupTable, MessageModule};
@@ -73,7 +73,9 @@ pub trait ModuleOutgoingStub<M> {
 ///
 /// These methods serve to receive messages from the network layer, for a specific module,
 /// with the separations described in [MessageModule]
-pub trait ModuleIncomingStub<M>: Send + Sync + Clone {
+pub trait ModuleIncomingStub<M>:
+    Send + Sync + Clone + AsRef<ChannelSyncRx<StoredMessage<M>>>
+{
     /// Get the amount of pending requests contained in this stub
     fn pending_rqs(&self) -> usize;
 
@@ -90,7 +92,9 @@ pub trait ModuleIncomingStub<M>: Send + Sync + Clone {
 /// The trait that directs the ordering of operations
 /// for a batched incoming stub. This is similar to the [ModuleIncomingStub] trait, but
 /// this one is used for modules that have a batched message handling (namely [ConnectedPeersGroup] )
-pub trait BatchedModuleIncomingStub<M> {
+pub trait BatchedModuleIncomingStub<M>:
+    Send + Sync + Clone + AsRef<ChannelSyncRx<Vec<StoredMessage<M>>>>
+{
     /// Receive a batch of messages from this stub.
     /// Blocks until a message is available
     fn receive_messages(&self) -> Result<Vec<StoredMessage<M>>>;
