@@ -129,16 +129,15 @@ impl ReconfigurationNetworkCommunication {
 }
 
 impl NetworkReconfigurationCommunication {
-    
     /// Receive a network update from the reconfiguration protocol
-    /// 
+    ///
     /// This method will bro block until a network update is received
     pub fn receive_network_update(&self) -> Result<ReconfigurationNetworkUpdateMessage> {
         self.network_update_receiver.recv()
     }
 
     /// Try to receive a network update from the reconfiguration protocol
-    /// 
+    ///
     /// This method will return immediately with an `Ok(None)` if no network update is available
     pub fn try_receive_network_update(
         &self,
@@ -199,7 +198,7 @@ impl NodeInfo {
         node_id: NodeId,
         node_type: NodeType,
         public_key: PublicKey,
-        addr: PeerAddr,
+        addr: PeerAddr
     ) -> Self {
         NodeInfo {
             node_id,
