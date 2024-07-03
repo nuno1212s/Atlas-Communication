@@ -69,10 +69,10 @@ pub enum NetworkUpdatedMessage {
 /// the reconfiguration protocol and the network protocols.
 ///
 /// This handle is made for the Reconfiguration protocol side
-#[derive(Clone)]
+#[derive(Clone, Getters)]
 pub struct ReconfigurationNetworkCommunication {
     network_update_sender: ChannelSyncTx<ReconfigurationNetworkUpdateMessage>,
-
+    #[get = "pub"]
     network_update_receiver: ChannelSyncRx<NetworkUpdatedMessage>,
 }
 
