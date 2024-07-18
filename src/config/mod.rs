@@ -39,12 +39,12 @@ impl ClientPoolConfig {
 impl Default for ClientPoolConfig {
     fn default() -> Self {
         Self {
-            batch_limit: 100,
-            per_client_bound: 100,
-            clients_per_pool: 100,
+            batch_limit: 1024,
+            per_client_bound: 1024,
+            clients_per_pool: 1024,
             batch_timeout_micros: 1000,
-            batch_sleep_micros: 1000,
-            channel_size: 128,
+            batch_sleep_micros: 250,
+            channel_size: 1024,
         }
     }
 }
