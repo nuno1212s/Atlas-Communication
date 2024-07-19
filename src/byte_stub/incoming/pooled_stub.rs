@@ -2,7 +2,9 @@
 
 use crate::config::ClientPoolConfig;
 use crate::message::StoredMessage;
-use crate::metric::{CLIENT_POOL_COLLECT_TIME_ID, CLIENT_POOL_SLEEP_TIME_ID};
+use crate::metric::{
+    CLIENT_POOL_COLLECT_TIME_ID, CLIENT_POOL_SLEEP_TIME_ID, RQ_CLIENT_POOL_TIME_SPENT_ID,
+};
 use crate::stub::BatchedModuleIncomingStub;
 use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
 use atlas_common::node_id::NodeId;
@@ -36,7 +38,7 @@ pub type ClientPeer<T> = Arc<ConnectedClientPeer<T>>;
 
 pub struct ConnectedClientPeer<T> {
     peer_id: NodeId,
-    queue: Mutex<Vec<T>>,
+    queue: Mutex<Vec<(T, Instant)>>,
     disconnect: AtomicBool,
 }
 
@@ -369,16 +371,7 @@ where
             }
 
             //Collect all possible requests from each client
-
-            let mut rqs_dumped = match client.dump_requests(replacement_vec) {
-                Ok(rqs) => rqs,
-                Err(vec) => {
-                    dced.push(client.client_id());
-
-                    replacement_vec = vec;
-                    continue;
-                }
-            };
+            let mut rqs_dumped = client.dump_requests(replacement_vec);
 
             collected_requests_per_revolution += rqs_dumped.len();
 
@@ -401,9 +394,8 @@ where
                     let current_time = Instant::now();
 
                     let collection_time = current_time.duration_since(start_time).as_micros();
-                    if collection_time
-                        >= self.batch_timeout_micros as u128
-                    {
+
+                    if collection_time >= self.batch_timeout_micros as u128 {
                         //Check if a given amount of time limit has passed, to prevent us getting
                         //Stuck while checking for requests
                         break;
@@ -454,6 +446,26 @@ where
 
         metric_duration(CLIENT_POOL_COLLECT_TIME_ID, start.elapsed());
 
+        let mut accumulated_duration = Duration::new(0, 0);
+        
+        let batch: Vec<T> = batch
+            .into_iter()
+            .map(|(vec, insert_time)| {
+                accumulated_duration += insert_time.elapsed();
+
+                vec
+            })
+            .collect();
+        
+        if !batch.is_empty() {
+            let nanos = accumulated_duration.as_nanos() / batch.len() as u128;
+            
+            metric_duration(
+                RQ_CLIENT_POOL_TIME_SPENT_ID,
+                Duration::from_nanos(nanos as u64),
+            );
+        }
+
         Ok(batch)
     }
 
@@ -479,10 +491,10 @@ impl<T> ConnectedClientPeer<T> {
         self.disconnect.store(true, Ordering::Relaxed)
     }
 
-    pub fn dump_requests(&self, replacement_vec: Vec<T>) -> Result<Vec<T>, Vec<T>> {
+    pub fn dump_requests(&self, replacement_vec: Vec<(T, Instant)>) -> Vec<(T, Instant)> {
         let mut guard = self.queue.lock().unwrap();
 
-        Ok(std::mem::replace(&mut *guard, replacement_vec))
+        std::mem::replace(&mut *guard, replacement_vec)
     }
 
     pub fn push_request(&self, msg: T) -> atlas_common::error::Result<()> {
@@ -496,7 +508,7 @@ impl<T> ConnectedClientPeer<T> {
 
             Err!(ClientPoolError::PooledConnectionClosed(self.peer_id))
         } else {
-            sender_guard.push(msg);
+            sender_guard.push((msg, Instant::now()));
 
             Ok(())
         }

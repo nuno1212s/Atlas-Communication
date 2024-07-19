@@ -19,6 +19,9 @@ pub(crate) const THREADPOOL_PASS_TIME_ID: usize = 408;
 pub(crate) const CLIENT_POOL_SLEEP_TIME: &str = "CLIENT_POOL_SLEEP_TIME";
 pub(crate) const CLIENT_POOL_SLEEP_TIME_ID: usize = 409;
 
+pub(crate) const RQ_CLIENT_POOL_TIME_SPENT: &str = "TIME_SPENT_CLIENT_POOL";
+pub(crate) const RQ_CLIENT_POOL_TIME_SPENT_ID: usize = 410;
+
 pub fn metrics() -> Vec<MetricRegistry> {
     vec![
         (
@@ -56,6 +59,12 @@ pub fn metrics() -> Vec<MetricRegistry> {
             CLIENT_POOL_SLEEP_TIME.to_string(),
             MetricKind::Duration,
             MetricLevel::Trace,
+        )
+            .into(),
+        (
+            RQ_CLIENT_POOL_TIME_SPENT_ID,
+            RQ_CLIENT_POOL_TIME_SPENT.to_string(),
+            MetricKind::Duration,
         )
             .into(),
     ]
