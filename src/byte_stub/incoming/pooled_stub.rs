@@ -447,7 +447,7 @@ where
         metric_duration(CLIENT_POOL_COLLECT_TIME_ID, start.elapsed());
 
         let mut accumulated_duration = Duration::new(0, 0);
-        
+
         let batch: Vec<T> = batch
             .into_iter()
             .map(|(vec, insert_time)| {
@@ -456,10 +456,10 @@ where
                 vec
             })
             .collect();
-        
+
         if !batch.is_empty() {
             let nanos = accumulated_duration.as_nanos() / batch.len() as u128;
-            
+
             metric_duration(
                 RQ_CLIENT_POOL_TIME_SPENT_ID,
                 Duration::from_nanos(nanos as u64),

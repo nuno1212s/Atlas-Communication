@@ -16,6 +16,7 @@ use enum_map::EnumMap;
 use getset::{CopyGetters, Getters};
 use strum::IntoEnumIterator;
 use thiserror::Error;
+use tracing::info;
 
 use crate::byte_stub::incoming::{
     pooled_stub, unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable,
@@ -377,6 +378,11 @@ where
         let is_known = self.network_info.get_node_info(&node).is_some();
 
         let authenticated = Arc::new(AtomicBool::new(is_known));
+
+        info!(
+            "Initializing connection to node: {:?} with authenticated {:?}",
+            node, authenticated
+        );
 
         Ok(PeerConnection {
             authenticated: authenticated.clone(),

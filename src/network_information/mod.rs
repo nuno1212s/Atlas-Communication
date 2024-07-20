@@ -1,4 +1,4 @@
-use tracing::error;
+use tracing::{error, info};
 
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
@@ -43,6 +43,7 @@ pub(crate) fn initialize_network_info_handle<PM>(
 
                                         continue;
                                     }
+                                    info!("Successfully upgraded connection to node {:?} of type {:?}", node, node_type);
                                 } else {
                                     error!("Received a connection permitted message for a node that is not pending connection. Node: {:?}", node);
                                 }
