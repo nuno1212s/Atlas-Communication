@@ -6,6 +6,7 @@ use std::time::Duration;
 use crate::byte_stub::connections::NetworkConnectionController;
 use crate::network_information::PendingConnectionManagement;
 use anyhow::anyhow;
+use dashmap::DashMap;
 use atlas_common::channel::ChannelSyncRx;
 use atlas_common::collections::HashMap;
 use atlas_common::crypto::signature::PublicKey;
@@ -186,7 +187,7 @@ where
 }
 
 pub type ActiveCNNMap<CN, R, O, S, A, L> =
-    Mutex<HashMap<NodeId, PeerConnection<CN, R, O, S, A, L>>>;
+    DashMap<NodeId, PeerConnection<CN, R, O, S, A, L>>;
 
 /// The active stubs, connecting to a given peer
 #[derive(Getters)]
@@ -482,7 +483,7 @@ where
     L: Clone,
 {
     pub fn has_connection(&self, node: &NodeId) -> bool {
-        self.connection_map.lock().unwrap().contains_key(node)
+        self.connection_map.contains_key(node)
     }
 
     pub fn get_connection(&self, node: &NodeId) -> Option<PeerConnection<CN, R, O, S, A, L>> {
@@ -490,15 +491,15 @@ where
             return Some(self.loopback.clone());
         }
 
-        self.connection_map.lock().unwrap().get(node).cloned()
+        self.connection_map.get(node).map(|map| map.value().clone())
     }
 
     pub fn add_connection(&self, node: NodeId, connection: PeerConnection<CN, R, O, S, A, L>) {
-        self.connection_map.lock().unwrap().insert(node, connection);
+        self.connection_map.insert(node, connection);
     }
 
     pub fn remove_connection(&self, node: &NodeId) -> Option<PeerConnection<CN, R, O, S, A, L>> {
-        self.connection_map.lock().unwrap().remove(node)
+        self.connection_map.remove(node).map(|(node_id, conn)| conn)
     }
 }
 
@@ -555,7 +556,7 @@ where
         Self {
             id,
             loopback,
-            connection_map: Mutex::new(Default::default()),
+            connection_map: Default::default(),
         }
     }
 }

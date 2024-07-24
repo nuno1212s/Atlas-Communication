@@ -142,21 +142,21 @@ where
     S: Serializable + 'static,
     A: Serializable + 'static,
 {
-    fn handle_message<NI>(&self, network_info: &Arc<NI>, message: WireMessage) -> Result<()>
+    fn handle_message<NI>(&self, _network_info: &Arc<NI>, message: WireMessage) -> Result<()>
     where
         NI: NetworkInformationProvider + 'static,
     {
-        let lookup_table = self.lookup_table.clone();
         let peer_stub_lookup = self.stub_lookup.clone();
-        let network_info = network_info.clone();
+        //let lookup_table = self.lookup_table.clone();
+        //let network_info = network_info.clone();
         let authenticated = self.authenticated.load(Ordering::Relaxed);
 
         atlas_common::threadpool::execute(move || {
             quiet_unwrap!(message_ingestion::process_wire_message_message(
                 message,
                 authenticated,
-                &*network_info,
-                &lookup_table,
+                //&*network_info,
+                //&lookup_table,
                 &peer_stub_lookup
             ));
         });

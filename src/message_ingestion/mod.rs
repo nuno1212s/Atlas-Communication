@@ -21,8 +21,8 @@ use crate::serialization::{deserialize_message, Serializable};
 pub(crate) fn process_wire_message_message<R, O, S, A>(
     message: WireMessage,
     authenticated: bool,
-    network_info: &impl NetworkInformationProvider,
-    lookup_table: &impl LookupTable<R, O, S, A>,
+    //network_info: &impl NetworkInformationProvider,
+   // lookup_table: &impl LookupTable<R, O, S, A>,
     stubs: &impl PeerStubLookupTable<R, O, S, A>,
 ) -> Result<(), IngestMessageError>
 where
@@ -46,36 +46,36 @@ where
             }
         }
     } /*else if let Err(e) = verify_ser_message_validity(network_info, &header, &message) {
-        warn!(
-            "Failed to verify message validity for message module: {:?}",
-            module
-        );
+          warn!(
+              "Failed to verify message validity for message module: {:?}",
+              module
+          );
 
-        return Err!(e);
-    }*/
+          return Err!(e);
+      }*/
 
     // FIXME: Is this part with the lookup table even necessary? We just directly type in the types anyways so I think it is redundant.
-    let serialization_mod = lookup_table.get_module_for_message(&module);
+    //let serialization_mod = lookup_table.get_module_for_message(&module);
 
     let stub = stubs.get_stub_for_message(&module);
 
-    match serialization_mod {
-        MessageModuleSerialization::Reconfiguration(_) => {
+    match &module {
+        MessageModule::Reconfiguration => {
             let m = deserialize_message::<&[u8], R>(&message)?;
 
             stub.push_reconfiguration(header, m)?;
         }
-        MessageModuleSerialization::Protocol(_) => {
+        MessageModule::Protocol => {
             let m = deserialize_message::<&[u8], O>(&message)?;
 
             stub.push_protocol(header, m)?;
         }
-        MessageModuleSerialization::StateProtocol(_) => {
+        MessageModule::StateProtocol => {
             let m = deserialize_message::<&[u8], S>(&message)?;
 
             stub.push_state_protocol(header, m)?;
         }
-        MessageModuleSerialization::Application(_) => {
+        MessageModule::Application => {
             let m = deserialize_message::<&[u8], A>(&message)?;
 
             stub.push_application(header, m)?;

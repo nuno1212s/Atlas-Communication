@@ -42,8 +42,8 @@ impl Default for ClientPoolConfig {
             batch_limit: 1024,
             per_client_bound: 1024,
             clients_per_pool: 1024,
-            batch_timeout_micros: 1000,
-            batch_sleep_micros: 250,
+            batch_timeout_micros: 250,
+            batch_sleep_micros: 100,
             channel_size: 1024,
         }
     }
@@ -63,6 +63,6 @@ impl UnpooledConnection {
 
 impl Default for UnpooledConnection {
     fn default() -> Self {
-        Self { channel_size: 1024 }
+        Self { channel_size: 2048 }
     }
 }
