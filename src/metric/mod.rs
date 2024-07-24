@@ -22,6 +22,14 @@ pub(crate) const CLIENT_POOL_SLEEP_TIME_ID: usize = 409;
 pub(crate) const RQ_CLIENT_POOL_TIME_SPENT: &str = "TIME_SPENT_CLIENT_POOL";
 pub(crate) const RQ_CLIENT_POOL_TIME_SPENT_ID: usize = 410;
 
+pub(crate) const OUTGOING_MESSAGE_SIZE: &str = "OUTGOING_MESSAGE_SIZE";
+pub(crate) const OUTGOING_MESSAGE_SIZE_ID: usize = 411;
+
+pub(crate) const INCOMING_MESSAGE_SIZE: &str = "INCOMING_MESSAGE_SIZE";
+pub(crate) const INCOMING_MESSAGE_SIZE_ID: usize = 412;
+
+pub(crate) const MESSAGE_DELIVER_TIME: &str = "MESSAGE_DELIVER_TIME";
+pub(crate) const MESSAGE_DELIVER_TIME_ID: usize = 413;
 pub fn metrics() -> Vec<MetricRegistry> {
     vec![
         (
@@ -65,6 +73,27 @@ pub fn metrics() -> Vec<MetricRegistry> {
             RQ_CLIENT_POOL_TIME_SPENT_ID,
             RQ_CLIENT_POOL_TIME_SPENT.to_string(),
             MetricKind::Duration,
+        )
+            .into(),
+        (
+            OUTGOING_MESSAGE_SIZE_ID,
+            OUTGOING_MESSAGE_SIZE.to_string(),
+            MetricKind::CountMax(10),
+            MetricLevel::Trace,
+        )
+            .into(),
+        (
+            INCOMING_MESSAGE_SIZE_ID,
+            INCOMING_MESSAGE_SIZE.to_string(),
+            MetricKind::CountMax(10),
+            MetricLevel::Trace,
+        )
+            .into(),
+        (
+            MESSAGE_DELIVER_TIME_ID,
+            MESSAGE_DELIVER_TIME.to_string(),
+            MetricKind::Duration,
+            MetricLevel::Trace,
         )
             .into(),
     ]

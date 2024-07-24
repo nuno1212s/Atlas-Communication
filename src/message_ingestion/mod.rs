@@ -1,7 +1,7 @@
 use anyhow::Error;
 use atlas_common::node_id::NodeId;
 use atlas_common::Err;
-use atlas_metrics::metrics::metric_duration;
+use atlas_metrics::metrics::{metric_duration, metric_store_count_max};
 use std::time::Instant;
 use thiserror::Error;
 use tracing::warn;
@@ -9,9 +9,9 @@ use tracing::warn;
 use crate::lookup_table::{
     LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,
 };
-use crate::message::WireMessage;
+use crate::message::{Header, WireMessage};
 use crate::message_signing::{verify_ser_message_validity, IngestionError};
-use crate::metric::COMM_DESERIALIZE_VERIFY_TIME_ID;
+use crate::metric::{COMM_DESERIALIZE_VERIFY_TIME_ID, INCOMING_MESSAGE_SIZE_ID};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::{deserialize_message, Serializable};
 
@@ -22,7 +22,7 @@ pub(crate) fn process_wire_message_message<R, O, S, A>(
     message: WireMessage,
     authenticated: bool,
     //network_info: &impl NetworkInformationProvider,
-   // lookup_table: &impl LookupTable<R, O, S, A>,
+    // lookup_table: &impl LookupTable<R, O, S, A>,
     stubs: &impl PeerStubLookupTable<R, O, S, A>,
 ) -> Result<(), IngestMessageError>
 where
@@ -53,6 +53,8 @@ where
 
           return Err!(e);
       }*/
+
+    metric_store_count_max(INCOMING_MESSAGE_SIZE_ID, message.len() + Header::LENGTH);
 
     // FIXME: Is this part with the lookup table even necessary? We just directly type in the types anyways so I think it is redundant.
     //let serialization_mod = lookup_table.get_module_for_message(&module);
@@ -96,6 +98,7 @@ pub enum IngestMessageError {
     DeserializationError(#[from] Error),
     #[error("Failed to process wire message: {0:?}")]
     SignatureVerificationFailure(#[from] IngestionError),
-    #[error("Attempted to process message without authenticated flag, but message was not a reconfiguration message (module: {0:?}, node {1:?})")]
+    #[error("Attempted to process message without authenticated flag, but message was not a reconfiguration message (module: {0:?}, node {1:?})"
+    )]
     UnAuthenticatedMessage(MessageModule, NodeId),
 }
