@@ -42,8 +42,8 @@ impl Default for ClientPoolConfig {
             batch_limit: 1024,
             per_client_bound: 1024,
             clients_per_pool: 1024,
-            batch_timeout_micros: 250,
-            batch_sleep_micros: 100,
+            batch_timeout_micros: 500,
+            batch_sleep_micros: 250,
             channel_size: 1024,
         }
     }

@@ -386,10 +386,10 @@ where
             MessageModule::Application => {
                 let config = ClientPoolConfig::default();
 
-                let (tx, rx) = channel::new_bounded_sync(
-                    config.channel_size(),
-                    Some(format!("Pooled stub {:?} (Incoming)", message_mod)),
-                );
+                let (tx, rx) = channel::new_unbounded_sync(Some(format!(
+                    "Pooled stub {:?} (Incoming)",
+                    message_mod
+                )));
 
                 let stub_control = ConnectedPeersGroup::new(config, tx, rx.clone(), my_id);
 

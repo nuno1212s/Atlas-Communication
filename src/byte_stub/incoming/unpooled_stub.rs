@@ -23,10 +23,9 @@ impl<M> UnpooledStubManagement<M> {
         config: UnpooledConnection,
         module: MessageModule,
     ) -> (Self, UnpooledStubRX<M>) {
-        let (tx, rx) = channel::new_bounded_sync(
-            config.channel_size(),
-            Some(format!("Unpooled stub {:?} (Ingestion)", module)),
-        );
+        //TODO: Bounded sync
+        let (tx, rx) =
+            channel::new_unbounded_sync(Some(format!("Unpooled stub {:?} (Ingestion)", module)));
 
         (Self { tx }, UnpooledStubRX { rx })
     }

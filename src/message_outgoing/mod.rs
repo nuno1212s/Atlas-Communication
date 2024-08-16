@@ -19,7 +19,10 @@ use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::byte_stub::{ByteNetworkStub, DispatchError, PeerConnectionManager};
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, Header, StoredSerializedMessage, WireMessage};
-use crate::metric::{COMM_SERIALIZE_SIGN_TIME_ID, MESSAGE_DELIVER_TIME_ID, MESSAGE_SIGNING_TIME_ID, OUTGOING_MESSAGE_SIZE_ID, THREADPOOL_PASS_TIME_ID};
+use crate::metric::{
+    COMM_SERIALIZE_SIGN_TIME_ID, MESSAGE_DELIVER_TIME_ID, OUTGOING_MESSAGE_SIZE_ID,
+    THREADPOOL_PASS_TIME_ID,
+};
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
@@ -106,7 +109,7 @@ where
         conn_manager: &PeerConnectionManager<NI, CN, R, O, S, A, L>,
         shared: Option<&Arc<KeyPair>>,
         rng: &Arc<ThreadSafePrng>,
-        targets: impl Iterator<Item=NodeId>,
+        targets: impl Iterator<Item = NodeId>,
     ) -> Self::InitializedSendTos
     where
         L: LookupTable<R, O, S, A>,
@@ -157,11 +160,13 @@ where
     pub type TypedMessage = (ModMessageWrapped<R, O, S, A>, Buf, Digest);
     pub type SerializedMessage = (MessageModule, Buf, Digest);
 
-    pub fn value(self, msg: Either<Self::TypedMessage, Self::SerializedMessage>, start_time: Instant)
-    where
+    pub fn value(
+        self,
+        msg: Either<Self::TypedMessage, Self::SerializedMessage>,
+        start_time: Instant,
+    ) where
         CN: ByteNetworkStub + 'static,
     {
-        
         let key_pair: Option<&KeyPair> = None;
 
         match (self.peer, msg) {
@@ -179,11 +184,14 @@ where
                 metric_duration(COMM_SERIALIZE_SIGN_TIME_ID, start_time.elapsed());
 
                 let deliver_message_start_time = Instant::now();
-                
+
                 let (header, _, _) = wire_msg.into_inner();
 
                 stub.handle_message(header, msg);
-                metric_duration(MESSAGE_DELIVER_TIME_ID, deliver_message_start_time.elapsed());
+                metric_duration(
+                    MESSAGE_DELIVER_TIME_ID,
+                    deliver_message_start_time.elapsed(),
+                );
             }
             (PeerOutgoingConnection::OutgoingStub(stub), Either::Right((msg_mod, buf, digest))) => {
                 let wire_msg = WireMessage::new(
@@ -197,12 +205,15 @@ where
                 );
 
                 metric_duration(COMM_SERIALIZE_SIGN_TIME_ID, start_time.elapsed());
-                
+
                 let deliver_message_start_time = Instant::now();
-                
+
                 dispatch_message(stub, wire_msg, self.to);
-                
-                metric_duration(MESSAGE_DELIVER_TIME_ID, deliver_message_start_time.elapsed());
+
+                metric_duration(
+                    MESSAGE_DELIVER_TIME_ID,
+                    deliver_message_start_time.elapsed(),
+                );
             }
             _ => unreachable!(),
         }
@@ -308,7 +319,7 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
     shared: Option<&Arc<KeyPair>>,
     rng: &Arc<ThreadSafePrng>,
     message: ModMessageWrapped<R, O, S, A>,
-    targets: impl Iterator<Item=NodeId>,
+    targets: impl Iterator<Item = NodeId>,
 ) where
     CN: ByteNetworkStub + 'static,
     R: Serializable + 'static,
@@ -358,23 +369,28 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
         let buf = Bytes::from(buf);
 
         metric_store_count_max(OUTGOING_MESSAGE_SIZE_ID, buf.len() + Header::LENGTH);
-        
+
         if let Some(send_to_me) = send_to_me {
-            send_to_me.value(Either::Left((message, buf.clone(), digest)), serialize_time_start);
+            send_to_me.value(
+                Either::Left((message, buf.clone(), digest)),
+                serialize_time_start,
+            );
         }
 
         if let Some(send_tos) = send_tos {
             send_tos.into_iter().for_each(|send_to| {
                 if send_to.authenticated_state() {
-                    send_to.value(Either::Right((message_module.clone(), buf.clone(), digest)), serialize_time_start);
+                    send_to.value(
+                        Either::Right((message_module.clone(), buf.clone(), digest)),
+                        serialize_time_start,
+                    );
                 } else {
                     match &message_module {
                         MessageModule::Reconfiguration => {
-                            send_to.value(Either::Right((
-                                message_module.clone(),
-                                buf.clone(),
-                                digest,
-                            )), serialize_time_start);
+                            send_to.value(
+                                Either::Right((message_module.clone(), buf.clone(), digest)),
+                                serialize_time_start,
+                            );
                         }
                         _ => {
                             error!(
@@ -386,7 +402,6 @@ pub fn send_message_to_targets<NI, CN, R, O, S, A, L>(
                 }
             });
         }
-
     });
 }
 

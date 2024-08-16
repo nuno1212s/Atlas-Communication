@@ -6,13 +6,13 @@ use std::time::Duration;
 use crate::byte_stub::connections::NetworkConnectionController;
 use crate::network_information::PendingConnectionManagement;
 use anyhow::anyhow;
-use dashmap::DashMap;
 use atlas_common::channel::ChannelSyncRx;
 use atlas_common::collections::HashMap;
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
+use dashmap::DashMap;
 use enum_map::EnumMap;
 use getset::{CopyGetters, Getters};
 use strum::IntoEnumIterator;
@@ -186,8 +186,7 @@ where
     Pooled(pooled_stub::PooledStubOutput<StoredMessage<M>>),
 }
 
-pub type ActiveCNNMap<CN, R, O, S, A, L> =
-    DashMap<NodeId, PeerConnection<CN, R, O, S, A, L>>;
+pub type ActiveCNNMap<CN, R, O, S, A, L> = DashMap<NodeId, PeerConnection<CN, R, O, S, A, L>>;
 
 /// The active stubs, connecting to a given peer
 #[derive(Getters)]
