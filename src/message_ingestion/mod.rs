@@ -4,7 +4,6 @@ use atlas_common::Err;
 use atlas_metrics::metrics::{metric_duration, metric_store_count_max};
 use std::time::Instant;
 use thiserror::Error;
-use tracing::warn;
 
 use crate::lookup_table::{
     LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,
@@ -12,7 +11,6 @@ use crate::lookup_table::{
 use crate::message::{Header, WireMessage};
 use crate::message_signing::{verify_ser_message_validity, IngestionError};
 use crate::metric::{COMM_DESERIALIZE_VERIFY_TIME_ID, INCOMING_MESSAGE_SIZE_ID};
-use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::{deserialize_message, Serializable};
 
 /// Process a message received from the byte layer of the network.

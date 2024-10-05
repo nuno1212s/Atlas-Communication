@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::byte_stub::connections::NetworkConnectionController;
-use atlas_common::channel::ChannelSyncRx;
+use atlas_common::channel::sync::ChannelSyncRx;
 use std::sync::Arc;
 use std::time::Duration;
 

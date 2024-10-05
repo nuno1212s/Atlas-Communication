@@ -386,7 +386,7 @@ where
             MessageModule::Application => {
                 let config = ClientPoolConfig::default();
 
-                let (tx, rx) = channel::new_unbounded_sync(Some(format!(
+                let (tx, rx) = channel::sync::new_unbounded_sync(Some(format!(
                     "Pooled stub {:?} (Incoming)",
                     message_mod
                 )));

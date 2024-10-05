@@ -1,4 +1,4 @@
-use atlas_common::channel::OneShotRx;
+use atlas_common::channel::oneshot::OneShotRx;
 use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use std::sync::Arc;

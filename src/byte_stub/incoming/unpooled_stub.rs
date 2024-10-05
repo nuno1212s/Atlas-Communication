@@ -3,7 +3,8 @@ use std::time::Duration;
 
 use crate::config::UnpooledConnection;
 use crate::lookup_table::MessageModule;
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
+use atlas_common::channel::TryRecvError;
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::node_id::NodeId;
 use atlas_common::{channel, Err};
 
@@ -25,7 +26,7 @@ impl<M> UnpooledStubManagement<M> {
     ) -> (Self, UnpooledStubRX<M>) {
         //TODO: Bounded sync
         let (tx, rx) =
-            channel::new_unbounded_sync(Some(format!("Unpooled stub {:?} (Ingestion)", module)));
+            channel::sync::new_unbounded_sync(Some(format!("Unpooled stub {:?} (Ingestion)", module)));
 
         (Self { tx }, UnpooledStubRX { rx })
     }

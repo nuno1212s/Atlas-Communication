@@ -1,13 +1,12 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use std::time::Duration;
 
 use crate::byte_stub::connections::NetworkConnectionController;
 use crate::network_information::PendingConnectionManagement;
 use anyhow::anyhow;
-use atlas_common::channel::ChannelSyncRx;
-use atlas_common::collections::HashMap;
+use atlas_common::channel::sync::ChannelSyncRx;
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};

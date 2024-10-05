@@ -5,7 +5,8 @@ use anyhow::anyhow;
 use getset::{CopyGetters, Getters};
 
 use atlas_common::channel;
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, TryRecvError};
+use atlas_common::channel::TryRecvError;
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};
@@ -177,9 +178,9 @@ pub fn initialize_network_reconfiguration_comms(
     ReconfigurationNetworkCommunication,
 ) {
     let (network_tx, network_rx) =
-        channel::new_bounded_sync(channel_capacity, Some("Network reconfig message channel"));
+        channel::sync::new_bounded_sync(channel_capacity, Some("Network reconfig message channel"));
     let (reconfig_tx, reconfig_rx) =
-        channel::new_bounded_sync(channel_capacity, Some("Reconfig network message channel"));
+        channel::sync::new_bounded_sync(channel_capacity, Some("Reconfig network message channel"));
 
     (
         NetworkReconfigurationCommunication {
