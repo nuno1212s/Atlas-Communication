@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context};
-use atlas_common::channel::{ChannelSyncRx, ChannelSyncTx, OneShotRx};
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::oneshot::OneShotRx;
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::peer_addr::PeerAddr;
@@ -69,7 +70,6 @@ impl MockNetworkInfoFactory {
                         format!("127.0.0.1:{}", Self::PORT + (node_id as u32)).parse()?,
                         String::from("localhost"),
                     ),
-                    None,
                 ),
                 key: Arc::new(key),
             };
@@ -141,14 +141,22 @@ impl InternalMessageVerifier<MockMessage> for MockVerifier {
 struct MockByteStub(ChannelSyncTx<WireMessage>);
 
 impl ByteNetworkStub for MockByteStub {
-    fn dispatch_message(&self, message: WireMessage) -> atlas_common::error::Result<DispatchError> {
+    fn dispatch_message(&self, message: WireMessage) -> Result<(), DispatchError> {
         // When we dispatch a message, we send it to the other node
 
         self.0
             .send(message)
             .context("Failed to send message to another node")?;
 
-        Ok(DispatchError::Sucessfull)
+        Ok(())
+    }
+
+    fn dispatch_blocking(&self, message: WireMessage) -> error::Result<()> {
+        self.0
+            .send(message)
+            .context("Failed to send message to another node")?;
+        
+        Ok(())
     }
 }
 
@@ -257,7 +265,7 @@ impl MockByteManagementFactory {
         for node_id in 0..node_count {
             let node_id = NodeId::from(node_id);
 
-            let (tx, rx) = channel::new_bounded_sync(100, Some(format!("{:?}", node_id).as_str()));
+            let (tx, rx) = channel::sync::new_bounded_sync(100, Some(format!("{:?}", node_id).as_str()));
 
             connected.insert(node_id, (MockByteStub(tx), rx));
         }
