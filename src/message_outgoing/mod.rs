@@ -6,7 +6,7 @@ use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
 use smallvec::SmallVec;
-use tracing::{error, trace, warn};
+use tracing::{error, warn};
 
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::KeyPair;
@@ -250,7 +250,7 @@ where
     }
 }
 
-fn dispatch_message<CN>(stub: CN, message: WireMessage, to: NodeId)
+fn dispatch_message<CN>(stub: CN, message: WireMessage, _to: NodeId)
 where
     CN: ByteNetworkStub + 'static,
 {

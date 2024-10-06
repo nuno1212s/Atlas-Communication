@@ -21,7 +21,7 @@ pub struct UnpooledStubManagement<M> {
 
 impl<M> UnpooledStubManagement<M> {
     pub fn initialize_controller(
-        config: UnpooledConnection,
+        _config: UnpooledConnection,
         module: MessageModule,
     ) -> (Self, UnpooledStubRX<M>) {
         //TODO: Bounded sync

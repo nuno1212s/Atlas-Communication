@@ -6,10 +6,10 @@ use std::time::Instant;
 use thiserror::Error;
 
 use crate::lookup_table::{
-    LookupTable, MessageModule, MessageModuleSerialization, PeerStubLookupTable,
+     MessageModule, PeerStubLookupTable,
 };
 use crate::message::{Header, WireMessage};
-use crate::message_signing::{verify_ser_message_validity, IngestionError};
+use crate::message_signing::{IngestionError};
 use crate::metric::{COMM_DESERIALIZE_VERIFY_TIME_ID, INCOMING_MESSAGE_SIZE_ID};
 use crate::serialization::{deserialize_message, Serializable};
 
