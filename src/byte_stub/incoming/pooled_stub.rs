@@ -275,7 +275,7 @@ where
 
                     if !vec.is_empty() {
                         self.batch_transmission
-                            .send_return(vec)
+                            .send(vec)
                             .expect("Failed to send proposed batch");
 
                         // Sleep for a determined amount of time to allow clients to send requests
