@@ -15,7 +15,7 @@ use atlas_communication::lookup_table::EnumLookupTable;
 use atlas_communication::message::{Header, WireMessage};
 use atlas_communication::reconfiguration;
 use atlas_communication::reconfiguration::NetworkInformationProvider;
-use atlas_communication::serialization::{InternalMessageVerifier, Serializable};
+use atlas_communication::serialization::{InternalMessageVerifier, SerMsg};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;

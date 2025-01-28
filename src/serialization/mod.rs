@@ -9,7 +9,7 @@ use crate::message::{Buf, Header};
 use crate::reconfiguration::NetworkInformationProvider;
 use atlas_common::crypto::hash::{Context, Digest};
 use atlas_common::error::*;
-use atlas_common::serialization_helper::SerType;
+use atlas_common::serialization_helper::SerMsg;
 use std::io::{Read, Write};
 use std::sync::Arc;
 
@@ -27,7 +27,7 @@ pub trait InternalMessageVerifier<M> {
 /// The trait that should be implemented for all systems which wish to use this communication method
 pub trait Serializable: Send {
     /// The message type
-    type Message: SerType;
+    type Message: SerMsg;
 
     type Verifier: InternalMessageVerifier<Self::Message>;
 }

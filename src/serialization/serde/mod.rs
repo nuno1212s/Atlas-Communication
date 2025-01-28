@@ -1,4 +1,4 @@
-use crate::serialization::Serializable;
+use crate::serialization::{SerMsg, Serializable};
 use anyhow::Context;
 use std::io::{Read, Write};
 

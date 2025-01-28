@@ -44,7 +44,7 @@ pub trait ByteNetworkController: Send + Sync + Clone {
 
     /// The connection controller type, used to instruct the byte network layer
     /// to query the network level connections
-    type ConnectionController: NetworkConnectionController;
+    type ConnectionController: NetworkConnectionController + 'static;
 
     /// Get the reference to this controller's connection controller
     fn connection_controller(&self) -> &Arc<Self::ConnectionController>;
