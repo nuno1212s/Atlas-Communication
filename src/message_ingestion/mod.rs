@@ -5,11 +5,9 @@ use atlas_metrics::metrics::{metric_duration, metric_store_count_max};
 use std::time::Instant;
 use thiserror::Error;
 
-use crate::lookup_table::{
-     MessageModule, PeerStubLookupTable,
-};
+use crate::lookup_table::{MessageModule, PeerStubLookupTable};
 use crate::message::{Header, WireMessage};
-use crate::message_signing::{IngestionError};
+use crate::message_signing::IngestionError;
 use crate::metric::{COMM_DESERIALIZE_VERIFY_TIME_ID, INCOMING_MESSAGE_SIZE_ID};
 use crate::serialization::{deserialize_message, Serializable};
 

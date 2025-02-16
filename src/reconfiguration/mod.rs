@@ -5,8 +5,8 @@ use anyhow::anyhow;
 use getset::{CopyGetters, Getters};
 
 use atlas_common::channel;
-use atlas_common::channel::TryRecvError;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::TryRecvError;
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::error::*;
 use atlas_common::node_id::{NodeId, NodeType};

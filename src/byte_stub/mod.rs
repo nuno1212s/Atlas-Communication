@@ -1,5 +1,5 @@
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use std::time::Duration;
 
@@ -497,7 +497,9 @@ where
     }
 
     pub fn remove_connection(&self, node: &NodeId) -> Option<PeerConnection<CN, R, O, S, A, L>> {
-        self.connection_map.remove(node).map(|(_node_id, conn)| conn)
+        self.connection_map
+            .remove(node)
+            .map(|(_node_id, conn)| conn)
     }
 }
 

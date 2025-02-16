@@ -6,8 +6,8 @@ use crate::metric::{
     CLIENT_POOL_COLLECT_TIME_ID, CLIENT_POOL_SLEEP_TIME_ID, RQ_CLIENT_POOL_TIME_SPENT_ID,
 };
 use crate::stub::BatchedModuleIncomingStub;
-use atlas_common::channel::TryRecvError;
 use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
+use atlas_common::channel::TryRecvError;
 use atlas_common::node_id::NodeId;
 use atlas_common::Err;
 

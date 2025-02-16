@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context};
-use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::channel::oneshot::OneShotRx;
+use atlas_common::channel::sync::{ChannelSyncRx, ChannelSyncTx};
 use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::peer_addr::PeerAddr;
@@ -155,7 +155,7 @@ impl ByteNetworkStub for MockByteStub {
         self.0
             .send(message)
             .context("Failed to send message to another node")?;
-        
+
         Ok(())
     }
 }
@@ -265,7 +265,8 @@ impl MockByteManagementFactory {
         for node_id in 0..node_count {
             let node_id = NodeId::from(node_id);
 
-            let (tx, rx) = channel::sync::new_bounded_sync(100, Some(format!("{:?}", node_id).as_str()));
+            let (tx, rx) =
+                channel::sync::new_bounded_sync(100, Some(format!("{:?}", node_id).as_str()));
 
             connected.insert(node_id, (MockByteStub(tx), rx));
         }
