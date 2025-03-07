@@ -7,6 +7,7 @@ where
     W: Write + AsMut<[u8]>,
     T: Serializable,
 {
+    //TODO: Could this be faster if it were returning the vec and allowing bincode to manage it?
     bincode::serde::encode_into_std_write(m, w, bincode::config::standard()).context(format!(
         "Failed to serialize message {} bytes len",
         w.as_mut().len()
@@ -20,7 +21,7 @@ where
     T: Serializable,
     R: Read + AsRef<[u8]>,
 {
-    let msg = bincode::serde::decode_borrowed_from_slice(r.as_ref(), bincode::config::standard())
+    let (msg, _read_bytes) = bincode::serde::decode_from_slice(r.as_ref(), bincode::config::standard())
         .context("Failed to deserialize message")?;
 
     Ok(msg)
