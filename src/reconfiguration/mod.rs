@@ -93,14 +93,16 @@ impl ReconfigurationNetworkUpdate for ReconfigurationNetworkCommunication {
         &self,
         update: ReconfigurationNetworkUpdateMessage,
     ) -> Result<()> {
-        self.network_update_sender.send(update)
+        self.network_update_sender
+            .send(update)
             .context("Failed to send reconfiguration message to network update sender channel")
     }
 }
 
 impl ReconfigurationNetworkCommunication {
     pub fn receive_network_update(&self) -> Result<NetworkUpdatedMessage> {
-        self.network_update_receiver.recv()
+        self.network_update_receiver
+            .recv()
             .context("Failed to receive reconfiguration message from network update receiver")
     }
 
@@ -136,7 +138,8 @@ impl NetworkReconfigurationCommunication {
     ///
     /// This method will bro block until a network update is received
     pub fn receive_network_update(&self) -> Result<ReconfigurationNetworkUpdateMessage> {
-        self.network_update_receiver.recv()
+        self.network_update_receiver
+            .recv()
             .map_err(|err| err.into())
     }
 

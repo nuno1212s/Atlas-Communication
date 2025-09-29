@@ -1,11 +1,10 @@
-use getset::Getters;
-use dashmap::DashMap;
-use atlas_common::node_id::NodeId;
 use crate::byte_stub::peer_conn::PeerConnection;
 use crate::serialization::Serializable;
+use atlas_common::node_id::NodeId;
+use dashmap::DashMap;
+use getset::Getters;
 
 pub type ActiveCNNMap<CN, R, O, S, A, L> = DashMap<NodeId, PeerConnection<CN, R, O, S, A, L>>;
-
 
 /// The active stubs, connecting to a given peer
 #[derive(Getters)]
@@ -53,7 +52,6 @@ where
             .map(|(_node_id, conn)| conn)
     }
 }
-
 
 impl<CN, R, O, S, A, L> ActiveConnections<CN, R, O, S, A, L>
 where

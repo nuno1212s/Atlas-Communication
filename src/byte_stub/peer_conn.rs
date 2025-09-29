@@ -1,10 +1,10 @@
-use getset::Getters;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use crate::byte_stub::incoming::PeerIncomingConnection;
-use crate::byte_stub::NodeStubController;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
+use crate::byte_stub::NodeStubController;
 use crate::serialization::Serializable;
+use getset::Getters;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 /// The connection manager for a given peer
 ///

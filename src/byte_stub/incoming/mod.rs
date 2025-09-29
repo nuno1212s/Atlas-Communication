@@ -1,8 +1,8 @@
-use crate::byte_stub::peer_conn_manager::ModuleStubEndPoint;
 use crate::byte_stub::incoming::pooled_stub::{ConnectedPeersGroup, PooledStubOutput};
-use crate::byte_stub::{from_arr, BlankError, NodeIncomingStub};
+use crate::byte_stub::peer_conn_manager::ModuleStubEndPoint;
 use crate::byte_stub::peer_conn_manager::PeerStubEndpoints;
 use crate::byte_stub::stub_endpoint::StubEndpoint;
+use crate::byte_stub::{from_arr, BlankError, NodeIncomingStub};
 
 use crate::config::{ClientPoolConfig, UnpooledConnection};
 use crate::lookup_table::{LookupTable, MessageInputStubs, MessageModule};
@@ -144,10 +144,13 @@ where
     S: Serializable + 'static,
     A: Serializable + 'static,
 {
-
     type Error = BlankError;
 
-    fn handle_message<NI>(&self, _network_info: &Arc<NI>, message: WireMessage) -> std::result::Result<(), Self::Error>
+    fn handle_message<NI>(
+        &self,
+        _network_info: &Arc<NI>,
+        message: WireMessage,
+    ) -> std::result::Result<(), Self::Error>
     where
         NI: NetworkInformationProvider + 'static,
     {

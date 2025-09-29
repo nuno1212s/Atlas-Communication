@@ -1,28 +1,30 @@
-use getset::CopyGetters;
-use getset::Getters;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::Duration;
-use enum_map::EnumMap;
-use strum::IntoEnumIterator;
-use tracing::info;
-use atlas_common::channel::sync::ChannelSyncRx;
-use atlas_common::crypto::signature::PublicKey;
-use atlas_common::node_id::{NodeId, NodeType};
-use atlas_common::prng::ThreadSafePrng;
-use crate::byte_stub::incoming::{pooled_stub, unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable};
-use crate::byte_stub::{from_arr, BlankError, ByteNetworkStub, NodeStubController};
 use crate::byte_stub::connections::active_connections::ActiveConnections;
+use crate::byte_stub::incoming::{
+    pooled_stub, unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable,
+};
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::byte_stub::peer_conn::PeerConnection;
 use crate::byte_stub::stub_endpoint::StubEndpoint;
+use crate::byte_stub::{from_arr, BlankError, ByteNetworkStub, NodeStubController};
 use crate::lookup_table::{LookupTable, MessageModule};
 use crate::message::StoredMessage;
 use crate::network_information::PendingConnectionManagement;
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
+use atlas_common::channel::sync::ChannelSyncRx;
+use atlas_common::crypto::signature::PublicKey;
+use atlas_common::node_id::{NodeId, NodeType};
+use atlas_common::prng::ThreadSafePrng;
+use enum_map::EnumMap;
+use getset::CopyGetters;
+use getset::Getters;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::Duration;
+use strum::IntoEnumIterator;
+use tracing::info;
 
 /// The map of endpoints, connecting each MessageModule with the given
 /// receiver for that module
@@ -135,7 +137,6 @@ where
     }
 }
 
-
 /// The peer connection manager, responsible for generating and managing connections for a given peer
 ///
 /// Handles all connections , outgoing and incoming
@@ -183,8 +184,7 @@ where
     where
         L: LookupTable<R, O, S, A>,
     {
-        let (stub_controller, endpoints) =
-            PeerStubController::initialize_controller(id, node_type);
+        let (stub_controller, endpoints) = PeerStubController::initialize_controller(id, node_type);
 
         let loopback = Self::initialize_loopback(&stub_controller, lookup_table.clone(), id);
 
@@ -244,7 +244,8 @@ where
 
         // SAFETY: We know that the length of the array is correct because we initialized it with the correct capacity
         // And it is checked by a unit test in the test module
-        EnumMap::from_array(from_arr::<_, { crate::byte_stub::MODULES }>(enum_array).unwrap()).into()
+        EnumMap::from_array(from_arr::<_, { crate::byte_stub::MODULES }>(enum_array).unwrap())
+            .into()
     }
 
     /// Initialize an incoming connection for a given node
@@ -310,7 +311,7 @@ where
 }
 
 impl<NI, CN, R, O, S, A, L> PendingConnectionManagement
-for PeerConnectionManager<NI, CN, R, O, S, A, L>
+    for PeerConnectionManager<NI, CN, R, O, S, A, L>
 where
     R: Serializable,
     O: Serializable,
@@ -340,7 +341,7 @@ where
 }
 
 impl<NI, CN, R, O, S, A, L> NodeStubController<CN, PeerIncomingConnection<R, O, S, A, L>>
-for PeerConnectionManager<NI, CN, R, O, S, A, L>
+    for PeerConnectionManager<NI, CN, R, O, S, A, L>
 where
     R: Serializable,
     O: Serializable,
@@ -350,7 +351,6 @@ where
     NI: NetworkInformationProvider,
     CN: Send + Clone + Sync,
 {
-
     type Error = BlankError;
 
     fn has_stub_for(&self, node: &NodeId) -> bool {
@@ -386,7 +386,6 @@ where
         Ok(())
     }
 }
-
 
 impl<NI, CN, R, O, S, A, L> Clone for PeerConnectionManager<NI, CN, R, O, S, A, L>
 where

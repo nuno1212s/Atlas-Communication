@@ -554,8 +554,7 @@ where
     M: Send + Clone,
 {
     fn receive_messages(&self) -> atlas_common::error::Result<Vec<StoredMessage<M>>> {
-        self.0.recv()
-            .map_err(|err| err.into())
+        self.0.recv().map_err(|err| err.into())
     }
 
     fn try_receive_messages(

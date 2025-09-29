@@ -16,6 +16,7 @@ use atlas_common::quiet_unwrap;
 use atlas_metrics::metrics::{metric_duration, metric_store_count_max};
 
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
+use crate::byte_stub::peer_conn_manager::PeerConnectionManager;
 use crate::byte_stub::{ByteNetworkDispatchError, ByteNetworkStub, DispatchError};
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, Header, StoredSerializedMessage, WireMessage};
@@ -26,7 +27,6 @@ use crate::metric::{
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization;
 use crate::serialization::Serializable;
-use crate::byte_stub::peer_conn_manager::PeerConnectionManager;
 
 const NODE_QUORUM_SIZE: usize = 32;
 
@@ -268,15 +268,14 @@ where
     CN: ByteNetworkStub + 'static,
 {
     if let Err(dispatch_error) = stub.dispatch_message(message) {
-
         if dispatch_error.can_retry() {
             let message = dispatch_error.into();
 
             if circuits > CIRCUIT_BREAKER_ATTEMPTS {
                 error!(
-                        "Failed to send message to node {:?} after {} attempts, blocking",
-                        to, circuits
-                    );
+                    "Failed to send message to node {:?} after {} attempts, blocking",
+                    to, circuits
+                );
 
                 //TODO: If there are byzantine replicas reading requests slowly,
                 // this can start to bottleneck the system. We should consider
@@ -293,9 +292,9 @@ where
             handle_failed_message_delivery_circuit(stub, message, to, circuits + 1);
         } else {
             error!(
-                    "Internal error while sending message to node {:?}: {:?}",
-                    to, dispatch_error
-                );
+                "Internal error while sending message to node {:?}: {:?}",
+                to, dispatch_error
+            );
         }
     };
 }

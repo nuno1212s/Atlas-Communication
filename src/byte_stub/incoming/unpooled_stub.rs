@@ -93,8 +93,7 @@ where
     }
 
     fn receive_messages(&self) -> atlas_common::error::Result<StoredMessage<T>> {
-        self.rx.recv()
-            .map_err(|err| err.into())
+        self.rx.recv().map_err(|err| err.into())
     }
 
     fn try_receive_messages(

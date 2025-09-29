@@ -1,8 +1,8 @@
-use std::time::Duration;
-use atlas_common::channel::sync::ChannelSyncRx;
 use crate::byte_stub::incoming::{pooled_stub, unpooled_stub};
 use crate::message::StoredMessage;
 use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
+use atlas_common::channel::sync::ChannelSyncRx;
+use std::time::Duration;
 
 /// The output stub for a given message module
 ///
@@ -14,7 +14,6 @@ where
     Unpooled(unpooled_stub::UnpooledStubRX<StoredMessage<M>>),
     Pooled(pooled_stub::PooledStubOutput<StoredMessage<M>>),
 }
-
 
 impl<M> AsRef<ChannelSyncRx<StoredMessage<M>>> for StubEndpoint<M>
 where
@@ -58,7 +57,10 @@ where
         }
     }
 
-    fn try_receive_messages(&self, timeout: Option<Duration>) -> atlas_common::error::Result<Option<StoredMessage<M>>> {
+    fn try_receive_messages(
+        &self,
+        timeout: Option<Duration>,
+    ) -> atlas_common::error::Result<Option<StoredMessage<M>>> {
         match self {
             StubEndpoint::Unpooled(unpooled_stub) => unpooled_stub.try_receive_messages(timeout),
             _ => unreachable!(),
