@@ -395,8 +395,7 @@ where
                 let config = ClientPoolConfig::default();
 
                 let (tx, rx) = channel::sync::new_unbounded_sync(Some(format!(
-                    "Pooled stub {:?} (Incoming)",
-                    message_mod
+                    "Pooled stub {message_mod:?} (Incoming)"
                 )));
 
                 let stub_control = ConnectedPeersGroup::new(config, tx, rx.clone(), my_id);

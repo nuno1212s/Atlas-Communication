@@ -247,7 +247,7 @@ where
         //Spawn the thread that will collect client requests
         //and then send the batches to the channel.
         std::thread::Builder::new()
-            .name(format!("Peer pool collector thread #{}", pool_id))
+            .name(format!("Peer pool collector thread #{pool_id}"))
             .spawn(move || {
                 loop {
                     if self.finish_execution.load(Ordering::Relaxed) {
@@ -298,7 +298,7 @@ where
             .unwrap();
     }
 
-    pub fn attempt_to_add(&self, client: ClientPeer<T>) -> std::result::Result<(), ClientPeer<T>> {
+    pub fn attempt_to_add(&self, client: ClientPeer<T>) -> Result<(), ClientPeer<T>> {
         let mut guard = self.connected_clients.lock().unwrap();
 
         if guard.len() < self.client_limit {
@@ -310,10 +310,10 @@ where
         Err(client)
     }
 
-    pub fn attempt_to_remove(&self, client_id: &NodeId) -> std::result::Result<bool, ()> {
+    pub fn attempt_to_remove(&self, client_id: &NodeId) -> Result<bool, ()> {
         let mut guard = self.connected_clients.lock().unwrap();
 
-        return match guard
+        match guard
             .iter()
             .position(|client| client.client_id().eq(client_id))
         {
@@ -323,14 +323,14 @@ where
 
                 Ok(guard.is_empty())
             }
-        };
+        }
     }
 
     pub fn collect_requests(
         &self,
         batch_target_size: usize,
         _owner: &Arc<ConnectedPeersGroup<T>>,
-    ) -> std::result::Result<Vec<T>, ClientPoolError> {
+    ) -> Result<Vec<T>, ClientPoolError> {
         let start = Instant::now();
 
         let vec_size = std::cmp::max(batch_target_size, self.owner.per_client_cache);
@@ -343,7 +343,7 @@ where
 
         let mut connected_peers = Vec::with_capacity(guard.len());
 
-        if guard.len() == 0 {
+        if guard.is_empty() {
             return Err!(ClientPoolError::ClosePool);
         }
 

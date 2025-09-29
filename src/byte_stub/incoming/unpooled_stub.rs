@@ -26,8 +26,7 @@ impl<M> UnpooledStubManagement<M> {
     ) -> (Self, UnpooledStubRX<M>) {
         //TODO: Bounded sync
         let (tx, rx) = channel::sync::new_unbounded_sync(Some(format!(
-            "Unpooled stub {:?} (Ingestion)",
-            module
+            "Unpooled stub {module:?} (Ingestion)"
         )));
 
         (Self { tx }, UnpooledStubRX { rx })

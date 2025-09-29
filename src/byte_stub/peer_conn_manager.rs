@@ -1,19 +1,14 @@
 use crate::byte_stub::connections::active_connections::ActiveConnections;
-use crate::byte_stub::incoming::{
-    pooled_stub, unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable,
-};
+use crate::byte_stub::incoming::{PeerIncomingConnection, PeerStubController, PeerStubLookupTable};
 use crate::byte_stub::outgoing::loopback::LoopbackOutgoingStub;
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::byte_stub::peer_conn::PeerConnection;
 use crate::byte_stub::stub_endpoint::StubEndpoint;
 use crate::byte_stub::{from_arr, BlankError, ByteNetworkStub, NodeStubController};
 use crate::lookup_table::{LookupTable, MessageModule};
-use crate::message::StoredMessage;
 use crate::network_information::PendingConnectionManagement;
 use crate::reconfiguration::NetworkInformationProvider;
 use crate::serialization::Serializable;
-use crate::stub::{BatchedModuleIncomingStub, ModuleIncomingStub};
-use atlas_common::channel::sync::ChannelSyncRx;
 use atlas_common::crypto::signature::PublicKey;
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::prng::ThreadSafePrng;
@@ -22,7 +17,6 @@ use getset::CopyGetters;
 use getset::Getters;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Duration;
 use strum::IntoEnumIterator;
 use tracing::info;
 

@@ -151,14 +151,14 @@ impl serde::Serialize for Header {
 
 #[cfg(feature = "serialize_serde")]
 impl<'de> serde::Deserialize<'de> for Header {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Header, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Header, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let bytes: Vec<u8> = serde_bytes::deserialize(deserializer)?;
         let mut hdr: [u8; Self::LENGTH] = [0; Self::LENGTH];
         hdr.copy_from_slice(&bytes);
-        Ok(unsafe { std::mem::transmute(hdr) })
+        Ok(unsafe { std::mem::transmute::<[u8; Self::LENGTH], Header>(hdr) })
     }
 }
 
@@ -175,7 +175,7 @@ pub struct WireMessage {
 // to save a stack allocation? probably overkill
 impl Header {
     /// The size of the memory representation of the `Header` in bytes.
-    pub const LENGTH: usize = std::mem::size_of::<Self>();
+    pub const LENGTH: usize = size_of::<Self>();
 
     unsafe fn serialize_into_unchecked(self, buf: &mut [u8]) {
         #[cfg(target_endian = "big")]
@@ -186,7 +186,7 @@ impl Header {
             self.to = self.to.to_le();
             self.length = self.length.to_le();
         }
-        let hdr: [u8; Self::LENGTH] = std::mem::transmute(self);
+        let hdr: [u8; Self::LENGTH] = std::mem::transmute::<Header, [u8; Self::LENGTH]>(self);
         buf[..Self::LENGTH].copy_from_slice(&hdr[..]);
     }
 
@@ -466,8 +466,7 @@ impl Debug for Header {
         let from = self.from;
         let to = self.to;
 
-        write!(f, "Header {{ version: {}, length: {}, signature: {:x?}, digest: {:x?}, nonce: {}, from: {}, to: {} }}",
-               version, length, signature, digest, nonce, from, to
+        write!(f, "Header {{ version: {version}, length: {length}, signature: {signature:x?}, digest: {digest:x?}, nonce: {nonce}, from: {from}, to: {to} }}"
         )
     }
 }

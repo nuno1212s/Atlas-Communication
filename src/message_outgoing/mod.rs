@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::Context;
 use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
@@ -17,7 +16,7 @@ use atlas_metrics::metrics::{metric_duration, metric_store_count_max};
 
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
 use crate::byte_stub::peer_conn_manager::PeerConnectionManager;
-use crate::byte_stub::{ByteNetworkDispatchError, ByteNetworkStub, DispatchError};
+use crate::byte_stub::{ByteNetworkDispatchError, ByteNetworkStub};
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, Header, StoredSerializedMessage, WireMessage};
 use crate::metric::{

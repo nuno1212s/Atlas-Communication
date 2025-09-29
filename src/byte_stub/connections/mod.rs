@@ -13,6 +13,8 @@ pub trait NetworkConnectionController: Send + Sync {
 
     type ConnectionError: Error;
 
+    type IndividualConnectionResult = OneShotRx<Result<(), Self::IndConnError>>;
+
     /// Check if we are connected to a given node
     fn has_connection(&self, node: &NodeId) -> bool;
 
@@ -26,7 +28,7 @@ pub trait NetworkConnectionController: Send + Sync {
     fn connect_to_node(
         self: &Arc<Self>,
         node: NodeId,
-    ) -> Result<Vec<OneShotRx<Result<(), Self::IndConnError>>>, Self::ConnectionError>;
+    ) -> Result<Vec<Self::IndividualConnectionResult>, Self::ConnectionError>;
 
     // Destroy our connection to a given node
     fn disconnect_from_node(self: &Arc<Self>, node: &NodeId) -> Result<(), Self::ConnectionError>;

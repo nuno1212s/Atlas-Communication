@@ -3,21 +3,17 @@ use std::io;
 use std::sync::Arc;
 
 use crate::byte_stub::connections::NetworkConnectionController;
-use crate::byte_stub::incoming::{
-    unpooled_stub, PeerIncomingConnection, PeerStubController, PeerStubLookupTable,
-};
 use crate::lookup_table::MessageModule;
 use crate::message::WireMessage;
 use crate::reconfiguration::NetworkInformationProvider;
 use atlas_common::channel::{SendError, TrySendError};
-use getset::{CopyGetters, Getters};
 use thiserror::Error;
 
 pub mod connections;
 pub mod incoming;
 pub(crate) mod outgoing;
 pub(crate) mod peer_conn;
-pub(crate) mod peer_conn_manager;
+pub mod peer_conn_manager;
 pub(crate) mod stub_endpoint;
 #[cfg(test)]
 mod test;
@@ -74,9 +70,9 @@ pub enum DispatchError {
     SendError(#[from] SendError),
 }
 
-impl Into<WireMessage> for DispatchError {
-    fn into(self) -> WireMessage {
-        match self {
+impl From<DispatchError> for WireMessage {
+    fn from(value: DispatchError) -> Self {
+        match value {
             DispatchError::CouldNotDispatchTryLater(message) => message,
             _ => unreachable!("Cannot unbox an error as a message"),
         }
