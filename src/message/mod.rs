@@ -2,7 +2,6 @@ use crate::lookup_table::MessageModule;
 
 use atlas_common::crypto::hash::Digest;
 use atlas_common::crypto::signature::{KeyPair, PublicKey, Signature, VerifyError};
-use atlas_common::error::*;
 use atlas_common::node_id::NodeId;
 use atlas_common::ordering::{Orderable, SeqNo};
 use atlas_common::Err;
@@ -192,7 +191,7 @@ impl Header {
     }
 
     /// Serialize a `Header` into a byte buffer of appropriate size.
-    pub fn serialize_into(self, buf: &mut [u8]) -> Result<()> {
+    pub fn serialize_into(self, buf: &mut [u8]) -> Result<(), MessageErrors> {
         if buf.len() < Self::LENGTH {
             return Err!(MessageErrors::InvalidSizeSerDest(buf.len()));
         }
@@ -218,7 +217,7 @@ impl Header {
     }
 
     /// Deserialize a `Header` from a byte buffer of appropriate size.
-    pub fn deserialize_from(buf: &[u8]) -> Result<Self> {
+    pub fn deserialize_from(buf: &[u8]) -> Result<Self, MessageErrors> {
         if buf.len() < Self::LENGTH {
             return Err!(MessageErrors::InvalidSizeHeader(buf.len()));
         }

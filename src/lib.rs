@@ -11,8 +11,9 @@ use atlas_common::prng::ThreadSafePrng;
 
 use crate::byte_stub::incoming::PeerIncomingConnection;
 use crate::byte_stub::{
-    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub, PeerConnectionManager,
+    ByteNetworkController, ByteNetworkControllerInit, ByteNetworkStub,
 };
+use crate::byte_stub::peer_conn_manager::PeerConnectionManager;
 use crate::lookup_table::EnumLookupTable;
 use crate::network_information::initialize_network_info_handle;
 use crate::reconfiguration::{NetworkInformationProvider, NetworkReconfigurationCommunication};
@@ -111,14 +112,15 @@ where
             own_info.node_type(),
             lookup_table,
             rng.clone(),
-        )?;
+        );
 
         // Initialize the thread that will receive the updates from the reconfiguration protocol
         initialize_network_info_handle(reconfiguration_msg, connection_controller.clone());
 
         // Initialize the underlying byte level network controller
+        //TODO: Remove this unwrap
         let network_controller =
-            BN::initialize_controller(network_info.clone(), config, connection_controller.clone())?;
+            BN::initialize_controller(network_info.clone(), config, connection_controller.clone()).unwrap();
 
         Ok(Arc::new(Self {
             id: own_info.node_id(),

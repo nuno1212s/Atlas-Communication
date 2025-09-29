@@ -1,7 +1,9 @@
+use crate::byte_stub::peer_conn_manager::ModuleStubEndPoint;
 use crate::byte_stub::incoming::pooled_stub::{ConnectedPeersGroup, PooledStubOutput};
-use crate::byte_stub::{
-    from_arr, ModuleStubEndPoint, NodeIncomingStub, PeerStubEndpoints, StubEndpoint,
-};
+use crate::byte_stub::{from_arr, BlankError, NodeIncomingStub};
+use crate::byte_stub::peer_conn_manager::PeerStubEndpoints;
+use crate::byte_stub::stub_endpoint::StubEndpoint;
+
 use crate::config::{ClientPoolConfig, UnpooledConnection};
 use crate::lookup_table::{LookupTable, MessageInputStubs, MessageModule};
 use crate::message::{Header, StoredMessage, WireMessage};
@@ -142,7 +144,10 @@ where
     S: Serializable + 'static,
     A: Serializable + 'static,
 {
-    fn handle_message<NI>(&self, _network_info: &Arc<NI>, message: WireMessage) -> Result<()>
+
+    type Error = BlankError;
+
+    fn handle_message<NI>(&self, _network_info: &Arc<NI>, message: WireMessage) -> std::result::Result<(), Self::Error>
     where
         NI: NetworkInformationProvider + 'static,
     {
@@ -202,7 +207,7 @@ where
     pub fn initialize_controller(
         my_id: NodeId,
         node_type: NodeType,
-    ) -> Result<(Self, PeerStubEndpoints<R, O, S, A>)> {
+    ) -> (Self, PeerStubEndpoints<R, O, S, A>) {
         let mut controllers = Vec::new();
         let mut stub_output = Vec::new();
 
@@ -210,7 +215,7 @@ where
             let (controller, output) = match message_mod {
                 MessageModule::Reconfiguration => {
                     let (controller, output) =
-                        generate_stub_controller_for::<R::Message>(my_id, node_type, message_mod)?;
+                        generate_stub_controller_for::<R::Message>(my_id, node_type, message_mod);
 
                     (
                         PerMessageModStubController::Reconfiguration(controller),
@@ -219,7 +224,7 @@ where
                 }
                 MessageModule::Protocol => {
                     let (controller, output) =
-                        generate_stub_controller_for::<O::Message>(my_id, node_type, message_mod)?;
+                        generate_stub_controller_for::<O::Message>(my_id, node_type, message_mod);
 
                     (
                         PerMessageModStubController::Protocol(controller),
@@ -228,7 +233,7 @@ where
                 }
                 MessageModule::StateProtocol => {
                     let (controller, output) =
-                        generate_stub_controller_for::<S::Message>(my_id, node_type, message_mod)?;
+                        generate_stub_controller_for::<S::Message>(my_id, node_type, message_mod);
 
                     (
                         PerMessageModStubController::StateProtocol(controller),
@@ -237,7 +242,7 @@ where
                 }
                 MessageModule::Application => {
                     let (controller, output) =
-                        generate_stub_controller_for::<A::Message>(my_id, node_type, message_mod)?;
+                        generate_stub_controller_for::<A::Message>(my_id, node_type, message_mod);
 
                     (
                         PerMessageModStubController::Application(controller),
@@ -250,17 +255,17 @@ where
             stub_output.push(output);
         }
 
-        let map = EnumMap::from_array(from_arr::<_, MODULES>(controllers)?);
-        let output_map = EnumMap::from_array(from_arr::<_, MODULES>(stub_output)?);
+        let map = EnumMap::from_array(from_arr::<_, MODULES>(controllers).unwrap());
+        let output_map = EnumMap::from_array(from_arr::<_, MODULES>(stub_output).unwrap());
 
-        Ok((
+        (
             Self {
                 stub_controller_map: map,
             },
             PeerStubEndpoints {
                 stub_output_map: output_map,
             },
-        ))
+        )
     }
 
     pub(super) fn get_stub_controller_for(
@@ -363,7 +368,7 @@ fn generate_stub_controller_for<M>(
     my_id: NodeId,
     my_node_type: NodeType,
     message_mod: MessageModule,
-) -> Result<(PeerStubControllers<M>, StubEndpoint<M>)>
+) -> (PeerStubControllers<M>, StubEndpoint<M>)
 where
     M: Send + 'static,
 {
@@ -381,7 +386,7 @@ where
                 let peer_stub_controller = PeerStubControllers::Unpooled(unpooled_stub);
                 let stub_output = StubEndpoint::Unpooled(rx);
 
-                Ok((peer_stub_controller, stub_output))
+                (peer_stub_controller, stub_output)
             }
             MessageModule::Application => {
                 let config = ClientPoolConfig::default();
@@ -395,10 +400,10 @@ where
 
                 let peer_stub_control = PeerStubControllers::Pooled(stub_control);
 
-                Ok((
+                (
                     peer_stub_control,
                     StubEndpoint::Pooled(PooledStubOutput::from(rx)),
-                ))
+                )
             }
         },
         NodeType::Client => {
@@ -425,7 +430,7 @@ where
                     let peer_stub_controller = PeerStubControllers::Unpooled(unpooled_stub);
                     let stub_output = StubEndpoint::Unpooled(rx);
 
-                    Ok((peer_stub_controller, stub_output))
+                    (peer_stub_controller, stub_output)
                 }
             }
         }
