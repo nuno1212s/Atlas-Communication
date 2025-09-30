@@ -379,18 +379,10 @@ trait NetworkInformationProvider {
 
 ## 📊 Performance Characteristics
 
-### Throughput
-- **Serde Backend**: ~1M messages/sec (small messages)
-- **Cap'n Proto Backend**: ~2M messages/sec (zero-copy)
-
-### Latency
-- **Intra-datacenter**: <1ms p99
-- **Cross-datacenter**: <10ms p99 (network dependent)
-
-### Memory Usage
 - **Zero-copy deserialization** where possible
 - **Connection pooling** reduces allocation overhead
 - **Configurable buffer sizes** for memory tuning
+- **Per Module hot path** to prevent central contention
 
 ---
 
