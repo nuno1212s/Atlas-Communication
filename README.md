@@ -373,8 +373,8 @@ trait NetworkInformationProvider {
     fn get_node_info(&self, node_id: NodeId) -> Option<NodeInfo>;
     // ... other methods
 }
-```
-
+```[Cargo.toml](../Atlas-Comm-MIO/Cargo.toml)
+[Cargo.toml](../Atlas-Comm-MIO/Cargo.toml)
 ---
 
 ## 📊 Performance Characteristics

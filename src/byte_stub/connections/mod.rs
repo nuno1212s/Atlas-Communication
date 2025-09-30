@@ -5,6 +5,8 @@ use atlas_common::node_id::NodeId;
 use std::error::Error;
 use std::sync::Arc;
 
+pub type IndividualConnectionResult<E> = OneShotRx<Result<(), E>>;
+
 /// The byte level connection controller definitions
 ///
 /// This defines the necessary methods to provide connections to other peers
@@ -13,7 +15,6 @@ pub trait NetworkConnectionController: Send + Sync {
 
     type ConnectionError: Error;
 
-    type IndividualConnectionResult = OneShotRx<Result<(), Self::IndConnError>>;
 
     /// Check if we are connected to a given node
     fn has_connection(&self, node: &NodeId) -> bool;
@@ -28,7 +29,7 @@ pub trait NetworkConnectionController: Send + Sync {
     fn connect_to_node(
         self: &Arc<Self>,
         node: NodeId,
-    ) -> Result<Vec<Self::IndividualConnectionResult>, Self::ConnectionError>;
+    ) -> Result<Vec<IndividualConnectionResult<Self::IndConnError>>, Self::ConnectionError>;
 
     // Destroy our connection to a given node
     fn disconnect_from_node(self: &Arc<Self>, node: &NodeId) -> Result<(), Self::ConnectionError>;
