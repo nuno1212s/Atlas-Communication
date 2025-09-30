@@ -15,7 +15,6 @@ pub trait NetworkConnectionController: Send + Sync {
 
     type ConnectionError: Error;
 
-
     /// Check if we are connected to a given node
     fn has_connection(&self, node: &NodeId) -> bool;
 
