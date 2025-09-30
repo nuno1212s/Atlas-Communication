@@ -4,7 +4,9 @@ use atlas_common::crypto::signature::{KeyPair, PublicKey};
 use atlas_common::node_id::{NodeId, NodeType};
 use atlas_common::peer_addr::PeerAddr;
 use atlas_common::{channel, error};
-use atlas_communication::byte_stub::connections::{IndividualConnectionResult, NetworkConnectionController};
+use atlas_communication::byte_stub::connections::{
+    IndividualConnectionResult, NetworkConnectionController,
+};
 use atlas_communication::byte_stub::incoming::PeerIncomingConnection;
 use atlas_communication::byte_stub::peer_conn_manager::PeerConnectionManager;
 use atlas_communication::byte_stub::{
