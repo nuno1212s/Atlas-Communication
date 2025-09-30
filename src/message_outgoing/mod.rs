@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::Context;
 use bytes::Bytes;
 use either::Either;
 use getset::{CopyGetters, Getters};
@@ -16,7 +15,8 @@ use atlas_common::quiet_unwrap;
 use atlas_metrics::metrics::{metric_duration, metric_store_count_max};
 
 use crate::byte_stub::outgoing::PeerOutgoingConnection;
-use crate::byte_stub::{ByteNetworkStub, DispatchError, PeerConnectionManager};
+use crate::byte_stub::peer_conn_manager::PeerConnectionManager;
+use crate::byte_stub::{ByteNetworkDispatchError, ByteNetworkStub};
 use crate::lookup_table::{LookupTable, MessageModule, ModMessageWrapped};
 use crate::message::{Buf, Header, StoredSerializedMessage, WireMessage};
 use crate::metric::{
@@ -255,8 +255,7 @@ where
     CN: ByteNetworkStub + 'static,
 {
     stub.dispatch_blocking(message)
-        .context("Failed to send message to node")
-        .unwrap();
+        .expect("Failed to send message to node");
 
     //dispatch_message_circuit(stub, message, to, 0);
 }
@@ -268,35 +267,33 @@ where
     CN: ByteNetworkStub + 'static,
 {
     if let Err(dispatch_error) = stub.dispatch_message(message) {
-        match dispatch_error {
-            DispatchError::CouldNotDispatchTryLater(message) => {
-                if circuits > CIRCUIT_BREAKER_ATTEMPTS {
-                    error!(
-                        "Failed to send message to node {:?} after {} attempts, blocking",
-                        to, circuits
-                    );
+        if dispatch_error.can_retry() {
+            let message = dispatch_error.into();
 
-                    //TODO: If there are byzantine replicas reading requests slowly,
-                    // this can start to bottleneck the system. We should consider
-                    // throwing messages away if they are not delivered after a certain
-                    // number of attempts.
-                    stub.dispatch_blocking(message)
-                        .context("Failed to send message to node")
-                        .unwrap();
-
-                    return;
-                }
-
-                warn!("Failed to send message to node {:?} immediately, retrying for the {} time with a circuit breaker pattern", to, circuits);
-
-                handle_failed_message_delivery_circuit(stub, message, to, circuits + 1);
-            }
-            DispatchError::InternalError(err) => {
+            if circuits > CIRCUIT_BREAKER_ATTEMPTS {
                 error!(
-                    "Internal error while sending message to node {:?}: {:?}",
-                    to, err
+                    "Failed to send message to node {:?} after {} attempts, blocking",
+                    to, circuits
                 );
+
+                //TODO: If there are byzantine replicas reading requests slowly,
+                // this can start to bottleneck the system. We should consider
+                // throwing messages away if they are not delivered after a certain
+                // number of attempts.
+                stub.dispatch_blocking(message)
+                    .expect("Failed to send message to node");
+
+                return;
             }
+
+            warn!("Failed to send message to node {:?} immediately, retrying for the {} time with a circuit breaker pattern", to, circuits);
+
+            handle_failed_message_delivery_circuit(stub, message, to, circuits + 1);
+        } else {
+            error!(
+                "Internal error while sending message to node {:?}: {:?}",
+                to, dispatch_error
+            );
         }
     };
 }

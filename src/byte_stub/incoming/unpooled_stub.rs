@@ -26,8 +26,7 @@ impl<M> UnpooledStubManagement<M> {
     ) -> (Self, UnpooledStubRX<M>) {
         //TODO: Bounded sync
         let (tx, rx) = channel::sync::new_unbounded_sync(Some(format!(
-            "Unpooled stub {:?} (Ingestion)",
-            module
+            "Unpooled stub {module:?} (Ingestion)"
         )));
 
         (Self { tx }, UnpooledStubRX { rx })
@@ -93,7 +92,7 @@ where
     }
 
     fn receive_messages(&self) -> atlas_common::error::Result<StoredMessage<T>> {
-        self.rx.recv()
+        self.rx.recv().map_err(|err| err.into())
     }
 
     fn try_receive_messages(

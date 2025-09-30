@@ -1,4 +1,4 @@
-use crate::serialization::{SerMsg, Serializable};
+use crate::serialization::Serializable;
 use anyhow::Context;
 use std::io::{Read, Write};
 
@@ -21,8 +21,9 @@ where
     T: Serializable,
     R: Read + AsRef<[u8]>,
 {
-    let (msg, _read_bytes) = bincode::serde::decode_from_slice(r.as_ref(), bincode::config::standard())
-        .context("Failed to deserialize message")?;
+    let (msg, _read_bytes) =
+        bincode::serde::decode_from_slice(r.as_ref(), bincode::config::standard())
+            .context("Failed to deserialize message")?;
 
     Ok(msg)
 }

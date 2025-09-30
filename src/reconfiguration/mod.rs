@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use getset::{CopyGetters, Getters};
 
 use atlas_common::channel;
@@ -93,13 +93,17 @@ impl ReconfigurationNetworkUpdate for ReconfigurationNetworkCommunication {
         &self,
         update: ReconfigurationNetworkUpdateMessage,
     ) -> Result<()> {
-        self.network_update_sender.send(update)
+        self.network_update_sender
+            .send(update)
+            .context("Failed to send reconfiguration message to network update sender channel")
     }
 }
 
 impl ReconfigurationNetworkCommunication {
     pub fn receive_network_update(&self) -> Result<NetworkUpdatedMessage> {
-        self.network_update_receiver.recv()
+        self.network_update_receiver
+            .recv()
+            .context("Failed to receive reconfiguration message from network update receiver")
     }
 
     pub fn try_receive_network_update(
@@ -134,7 +138,9 @@ impl NetworkReconfigurationCommunication {
     ///
     /// This method will bro block until a network update is received
     pub fn receive_network_update(&self) -> Result<ReconfigurationNetworkUpdateMessage> {
-        self.network_update_receiver.recv()
+        self.network_update_receiver
+            .recv()
+            .map_err(|err| err.into())
     }
 
     /// Try to receive a network update from the reconfiguration protocol
