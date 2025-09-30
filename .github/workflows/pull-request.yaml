@@ -14,6 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Checkout Atlas-Common
+        uses: actions/checkout@v4
+        with:
+          repository: nuno1212s/Atlas-Common
+          path: ../Atlas-Common
+
+      - name: Checkout Atlas-capnp
+        uses: actions/checkout@v4
+        with:
+          repository: nuno1212s/Atlas-capnp
+          path: ../Atlas-capnp
+
+      - name: Checkout Atlas-Metrics
+        uses: actions/checkout@v4
+        with:
+          repository: nuno1212s/Atlas-Metrics
+          path: ../Atlas-Metrics
       - uses: Swatinem/rust-cache@v2
       - uses: actions-rs/toolchain@v1
         with:
